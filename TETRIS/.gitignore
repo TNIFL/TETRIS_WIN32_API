@@ -1,0 +1,51 @@
+﻿# ==============================
+# Visual Studio C++ 프로젝트 기본 .gitignore
+# ==============================
+
+# Visual Studio 사용자 설정
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# 빌드 산출물
+Debug/
+Release/
+x64/
+x86/
+*.exe
+*.dll
+*.pdb
+*.obj
+*.lib
+*.idb
+*.ipch
+*.pch
+*.cache
+*.log
+
+# 프로젝트 파일
+*.vcxproj*
+*.filters
+
+# 기타
+*.db
+*.sdf
+*.opensdf
+*.sln
+*.vcproj
+*.ncb
+*.sbr
+*.tlb
+*.tli
+*.tlh
+*.lastbuildstate
+*.vspscc
+*.vssscc
+
+# OS 별 라인 엔딩 충돌 방지
+*.[oa]
+*.swp
+*.DS_Store
+Thumbs.db

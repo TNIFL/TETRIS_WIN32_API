@@ -1,0 +1,29 @@
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build °á°ú
+Debug/
+Release/
+x64/
+ipch/
+*.obj
+*.pch
+*.pdb
+*.exe
+*.dll
+*.ilk
+*.log
+
+# NMake
+*.ncb
+*.opensdf
+*.sdf
+*.cachefile
+
+# OS
+Thumbs.db
+Desktop.ini
