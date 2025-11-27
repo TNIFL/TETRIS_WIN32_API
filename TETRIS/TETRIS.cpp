@@ -261,15 +261,36 @@ static const GameBoard GB = {
 
 /// 테트로미노 구조체
 struct Piece {
-    int type;   /// TETROMINO (0 ~ 6)
-    int rot;    /// ROT_ 0 ~ 270 (0, 90, 180, 270)
-    int x, y;   /// 보드에서의 좌표(왼쪽 위 기준)
+    TetrominiType type;   /// TETROMINO (0 ~ 6)
+    Rotation rot;    /// ROT_ 0 ~ 270 (0, 90, 180, 270)
+    int blockX, blockY;   /// 보드에서의 좌표(왼쪽 위 기준)
+    int r, g, b;/// 테트로미노의 고유한 색상
 };
+
+/// 현재 떨어지고 있는 블럭의 정보를 담은 구조체
+Piece currentPiece;
+
+/// 현재 Piece 구조체 사용 안하고있음
+/// 색상도 넣고 사용하려면 구조체 안에 여러 정보들이 있어야함
+/// 
 
 /// !!! 게임 보드 영역의 좌표는 무조건 왼쪽 위 부터 오른쪽 아래로 갈 수록 커짐
 /// g_board[BOARD_H][BOARD_W] 로 정의 한 이유
 /// 행 -> 열 순으로 위에서부터 아래로 행을 쌓아간다
-int g_board[BOARD_H][BOARD_W];
+/// 
+struct Cell {
+    bool isWall;        /// 벽이면 true
+    bool fix;           /// 고정상태면 true
+    int r, g, b;        /// 고정된 블럭의 색
+};
+
+Cell g_board[BOARD_H][BOARD_W];
+
+/// g_board 에도 색상을 넣기 위해서는 색상 정보를 저장할 변수들이 필요함
+/// 그렇다면 차라리 g_board도 구조체로 만들어버림
+/// cell 구조체를 만들고
+/// cell 구조체형식의 g_board 로 생성
+
 /// 게임 플레이 영역의 벽 초기화
 void InitBoard() {
     /// 위 빼고 왼쪽, 오른쪽, 아래만 그리는 로직을 다시 구성
@@ -285,17 +306,19 @@ void InitBoard() {
     /// 이렇게 그려져야함
     for (int y = 0; y < BOARD_H; y++) {
         for (int x = 0; x < BOARD_W; x++) {
+            /// 모든 색상을 rgb 0 0 0 으로 초기화
+            g_board[y][x].r = g_board[y][x].g = g_board[y][x].b = 0;
             /// x 가 0 이면 왼쪽 벽
             if (x == 0) {
-                g_board[y][x] = 1;  /// y행의 x열을 1로(왼쪽 벽)
+                g_board[y][x].isWall = TRUE;  /// y행의 x열을 1로(왼쪽 벽)
             }
             /// x 가 BOARD_W - 1 이면(인덱스 기준이라 -1 해야함) 오른쪽 벽
             else if (x == BOARD_W - 1) {
-                g_board[y][x] = 1;  /// y행의 x열을 1로(오른쪽 벽)
+                g_board[y][x].isWall = TRUE;  /// y행의 x열을 1로(오른쪽 벽)
             }
             /// y 가 BOARD_H - 1 이면(인덱스 기준이라 -1 해야함) 아래 벽
             else if (y == BOARD_H - 1) {
-                g_board[y][x] = 1;  /// y행의 모든 x 를 1로(아래 벽)
+                g_board[y][x].isWall = TRUE;  /// y행의 모든 x 를 1로(아래 벽)
             }
         }
     }
@@ -324,20 +347,19 @@ const int ORIGIN_Y = 70;
 void DrawGameBoard(HWND hWnd, HDC hdc) {
     for (int y = 0; y < BOARD_H; y++) {
         for (int x = 0; x < BOARD_W; x++) {
-            /// cell 에 InitBoard() 한 값을 넣고
-            /// 1, 0 으로 나눠서 그릴지 말지 판단
-            /// 1이면 그림
-            /// 2이면 안그림
-            int cell = g_board[y][x];   /// 초기화 한 보드 배열의 y,x 인덱스의 값을 넣음
+
             int px = ORIGIN_X + x * BLOCK;  /// 보드의 x 번째 칸이 화면에서 몇 픽셀에 있어야하는지
             int py = ORIGIN_Y + y * BLOCK;  /// 보드의 y 번째 칸이 화면에서 몇 필셀에 있어야하는지
-               
-            /// cell 이 1 이면 그려야함(벽)
-            if (cell == 1) {
+            /// cell 을 사용하지 않고
+            /// g_board[y][x].isWall 을 사용해서
+            /// 만약 TRUE 라면 벽 색을 회색으로 입히고
+            /// 만약 g_board[y][x].fix 가 TRUE 라면
+            /// 고정된 블럭이니 블럭의 색상을 g_board[y][x] 에 입힌다
+            if (g_board[y][x].isWall) {
                 HBRUSH myBrush = CreateSolidBrush(RGB(150, 150, 150));
                 /// os 가 들고있는 브러쉬를 myBrush 로 바꿔버림
                 HBRUSH osBrush = (HBRUSH)SelectObject(hdc, myBrush);
-                
+
                 Rectangle(hdc, px, py, px + BLOCK, py + BLOCK);
 
                 /// 다 쓴 브러쉬를 교환하고
@@ -345,7 +367,18 @@ void DrawGameBoard(HWND hWnd, HDC hdc) {
                 /// 정리
                 DeleteObject(myBrush);
             }
-            /// cell 이 0 이면 안그림
+            else if (g_board[y][x].fix) {
+                /// 고정된 블럭의 rgb 값으로 g_board[y][x] 좌표를 채운다
+                HBRUSH myBrush = CreateSolidBrush(
+                    RGB(g_board[y][x].r,
+                        g_board[y][x].g,
+                        g_board[y][x].b));
+                HBRUSH osBrush = (HBRUSH)SelectObject(hdc, myBrush);
+                Rectangle(hdc, px, py, px + BLOCK, py + BLOCK);
+                SelectObject(hdc, osBrush);
+                DeleteObject(myBrush);
+            }
+            /// 빈 칸 그리기(흰색)
             else {
                 Rectangle(hdc, px, py, px + BLOCK, py + BLOCK);
             }
@@ -355,11 +388,7 @@ void DrawGameBoard(HWND hWnd, HDC hdc) {
 
 /// 현재 내가 조작하고 있는 블럭 종류
 /// SpawnBlock 할 때 값을 할당해줄거임
-int currentBlockType;
 int currentBlock[4][4];   /// 현재 조작중인 블럭 4 x 4 크기
-int blockX, blockY;       /// 블럭 x,y 좌표 (currentBlock)
-/// 기본 ROT 는 0 으로 시작, 키보드 입력을 받아서 회전시키면 + - 해야함
-int currentRot;           /// 블럭 회전 반경, 이걸로 인덱스 접근할거임 (0~3 범위)
 
 
 /// 블럭이 내려와야함
@@ -401,81 +430,140 @@ void DrawNextLevelArea() {
 /// 내려온 블럭이 아래에 있던 벽이나 이미 설치되어있는 블럭에 닿았는지 검사
 /// 그리고 블럭 위치 고정시키기
 void FixBlock() {
+    /// 블럭을 고정시키려면
+    /// currentBlock이 고정되었을 시점에
+    /// InitBoard 현재 블럭의 값을 추가함
+    /// 다음번에 또 초기화 될 때에는 고정된 블럭이 추가 된 상태로
+    /// InitBoard 가 호출이 될거임
+    /// 하려면 g_board[BOARD_H][BOARD_W]에 추가해야함
+    /// 추가하는 방법은 어떻게 하지 시발
+    /// g_board 에서 블럭이 있는 위치를 1로 바꿔줌
+    /// BlockX, BlockY 에 있음 근데 이 BlockX, BlockY 는
+    /// currentblock 의 어디 기준이지?
+    /// currentBlock 의 (0, 0) 위치를 기준으로 잡아놓음
+    for (int y = 0; y < 4; y++) {
+        for (int x = 0; x < 4; x++) {
+            if (currentBlock[y][x] == 1) {
+                /// 이 상황에서 [y][x] 가 1 이면
+                /// 실제로 currentBlock 이 위치하는 좌표는
+                /// blockX + x, blockY + y 이다
+                /// fx = fix x, fy = fix y
+                int fx = currentPiece.blockX + x;    /// 블럭을 고정하기 위해 얻은 좌표
+                int fy = currentPiece.blockY + y;    /// 블럭을 고정하기 위해 얻은 좌표
+                /// g_board[fy][fx] 멤버의 값을 설정해줘야함
+                g_board[fy][fx].isWall = FALSE;   /// 벽이 아님
+                g_board[fy][fx].fix = TRUE;       /// 고정 시키기
+                g_board[fy][fx].r = currentPiece.r;
+                g_board[fy][fx].g = currentPiece.g;
+                g_board[fy][fx].b = currentPiece.b;
 
-}
+            }
+        }
+    }
+}   
 
 /// 다음에 나올 블럭을 미리 보여줌
 void ShowNextBlock() {
 
 }
 
-/// 벽에 닿았을 때 넘어가지 않게 해줌
-void CollisionDetection() {
-    /// 왼쪽 벽, 오른쪽 벽, 아래 벽 에 닿았을 때 넘어가지 않게 해줌
-    /// 겹침확인은 IntersectRect() 로 했었는데
-    /// 이건 그거 말고
-    /// 내가 그려놓은 게임보드를 기준으로 해보자
-    /// 우선 내가 색을 다르게 칠 해둔 영역 밖으로 나가면 안되는것이니
-    /// 이 CollisionDetection 함수는 내가 KEYDONW 할때 마다 호출시켜야함
-    /// 호출해서 blockX, blockY 값을 항상 비교
-    /// 그리고 시간이 지나면 어차피 blockY 를 비교해야하기 때문에 타이머에도 넣어야하나?
-    /// g_board[][] 와 비교하는건 필수
-    
-    for (int y = 0; y < BOARD_H; y++) {
-        /// 만약 해당 인덱스가 1 이면 벽이고
-        /// 그 상황에서 currentBlock 이 벽 쪽 으로 KEYDOWN 을 눌렀을 때
-        /// 못가게 막아야함
-        /// blockX가 존재해야하는 인덱스를 확인해야함
-         
-        /// 현재 상황은 블럭이 왼쪽, 오른쪽 벽에 닿았을 때
-        if (blockX == -1) {  /// blockX 값이 -1 이면 맨 왼쪽
-            blockX++;     /// 아무리 나가도 다시 0의 위치로 돌아옴
+void LoadCurrentPiece() {
+    for (int y = 0; y < 4; y++) {
+        for (int x = 0; x < 4; x++) {
+            /// 내 테트로미노 구조는 [0~6:블럭 타입][0~3:ROT_0~270][y:비트맵][x:비트맵]
+            currentBlock[y][x] = TETROMINO[currentPiece.type][currentPiece.rot][y][x];
         }
-        /// 오른쪽 검사는 좀 까다로움
-        /// 블럭의 오른쪽 기준으로 검사해야함
-        else if (blockX == BOARD_W - 1) {
-
-        }
-        /// 현재 상황은 블럭이 아래쪽 벽에 닿았을 때
     }
+}
+
+/// 벽에 닿았을 때 넘어가지 않게 해줌
+BOOL CollisionDetection(int dx, int dy) {
+    /// dx, dy 는 움직일 양을 뜻함
+    /// 왼쪽 벽, 오른쪽 벽, 아래 벽 에 닿았을 때 넘어가지 않게 해줌
+    /// 현재 테트로미노의 인덱스 기준으로 닿음을 확인함
+    /// 그러면 1칸 떨어지고 닿는 경우도 생김 
+    for (int y = 0; y < 4; y++) {
+        for (int x = 0; x < 4; x++) {
+            if (currentBlock[y][x] == 0) {
+                /// currentBlock 인덱스 내부에서 0 이면 없는 블럭
+                /// 없는 블럭이면 무시
+                continue;
+            }
+            int nx = currentPiece.blockX + x + dx;   /// 움직이고 나서의 게임보드에서의 블럭 위치
+            int ny = currentPiece.blockY + y + dy;   /// 움직이고 나서의 게임보드에서의 블럭 위치
+
+            /// 움직이고 나서 보드 밖으로 나갔는지 확인
+            if (nx < 0 || nx >= BOARD_W || ny < 0 || ny >= BOARD_H) {
+                return FALSE;
+            }
+            /// g_board[ny][nx] 가 1 이면 벽임
+            /// 이동불가
+            /// 그리고 고정된 블럭에도 못감
+            if (g_board[ny][nx].isWall || g_board[ny][nx].fix) {
+                return FALSE;
+            }
+        }
+    }
+    return TRUE;
+}
+
+/// currentPiece 를 회전시키는 함수 만들어야함
+void RotationCurrentPiece() {
+    
+
 }
 
 /// 블럭을 스폰시킴
 void SpawnBlock() {
-    srand(time(NULL));
+    
     /// 초기 블럭의 스폰 위치는 y : 70px, x : 220px 또는 250px
     /// 랜덤함수를 이용해서 0~6 사이의 값을 하나 받음
     /// 그 값에 해당하는 테트로미노를 하나 생성함
     /// 근데 그걸 어케하냐?
     /// 우선 rand 함수로 0~6 중에 하나 고름
-    currentBlockType = rand() % 7;  /// 0~6 사이 값 나옴, 스폰시킬 블럭의 타입이 정해짐
-    
+    currentPiece.type = (TetrominiType)(rand() % 7);  /// 0~6 사이 값 나옴, 스폰시킬 블럭의 타입이 정해짐
+    currentPiece.rot = ROT_0;        /// 회전 기본값
     /// 그리고 블럭의 초기 위치도 정해줘야함
     /// 초기 위치를 가지고 있는 변수는 blockX, blockY
-    blockX = BOARD_W / 2 - 2;
-    blockY = 0;
-    /// 항상 테트로미노의 [N][0] 은 ROT_0 블럭(기본) 이다
-    /// 그래서 처음 블럭 스폰할 때에는 ROT_0 의 블럭을 스폰시켜야한다
-    /// 그리고 선택되어진 블럭을 currentBlock 에 복사함
-    for (int y = 0; y < 4; y++) {
-        for (int x = 0; x < 4; x++) {
-            /// 내 테트로미노 구조는 [0~6:블럭 타입][0~3:ROT_0~270][y:비트맵][x:비트맵]
-            currentBlock[y][x] = TETROMINO[currentBlockType][currentRot][y][x];
-        }
+    currentPiece.blockX = BOARD_W / 2 - 2;
+    currentPiece.blockY = 0;
+    
+    /// 그리고 currentPiece 의 색상도 미리 정해줘야함
+    switch (currentPiece.type) {
+    case I:
+        currentPiece.r = 0; currentPiece.g = 255; currentPiece.b = 255; break;
+    case O:
+        currentPiece.r = 255; currentPiece.g = 255; currentPiece.b = 0; break;
+    case T:
+        currentPiece.r = 128; currentPiece.g = 0; currentPiece.b = 128; break;
+    case S:
+        currentPiece.r = 0; currentPiece.g = 255; currentPiece.b = 0; break;
+    case Z:
+        currentPiece.r = 255; currentPiece.g = 0; currentPiece.b = 255; break;
+    case J:
+        currentPiece.r = 0; currentPiece.g = 0; currentPiece.b = 255; break;
+    case L:
+        currentPiece.r = 255; currentPiece.g = 165; currentPiece.b = 0; break;
     }
+
+    LoadCurrentPiece();
+    
 }
+
 
 /// 화면에 스폰시킨 블럭 그리기
 void DrawCurrentBlock(HWND hWnd, HDC hdc) {
-    HBRUSH myBrush = CreateSolidBrush(RGB(255, 0, 0));  // 빨간 블럭
+    HBRUSH myBrush = CreateSolidBrush(RGB(
+        currentPiece.r, currentPiece.g, currentPiece.b
+    ));  // 빨간 블럭
     HBRUSH osBrush = (HBRUSH)SelectObject(hdc, myBrush);
     /// 여기서 x, y 는 블럭배열 안에서 1인 인덱스의 위치를 찾기 위해
     for (int y = 0; y < 4; y++) {
         for (int x = 0; x < 4; x++) {
             if (currentBlock[y][x] == 1) {  /// 1이면 해당 영역에 블럭이 존재
                 /// blockX, blockY : currentBlock의 위치를 보드 기준으로 나타내는 좌표
-                int px = ORIGIN_X + (blockX + x) * BLOCK;
-                int py = ORIGIN_Y + (blockY + y) * BLOCK;
+                int px = ORIGIN_X + (currentPiece.blockX + x) * BLOCK;
+                int py = ORIGIN_Y + (currentPiece.blockY + y) * BLOCK;
                 /// 블럭 그리기
                 Rectangle(hdc, px, py, px + BLOCK, py + BLOCK);
             }
@@ -531,7 +619,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     UNREFERENCED_PARAMETER(lpCmdLine);
 
     // TODO: 여기에 코드를 입력합니다.
-
+    /// 랜덤 시드 초기화
+    srand(time(NULL));
     // 전역 문자열을 초기화합니다.
     LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
     LoadStringW(hInstance, IDC_TETRIS, szWindowClass, MAX_LOADSTRING);
@@ -660,7 +749,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 /// 키보드 입력
 ///  - 키보드 화살표 왼쪽, 오른쪽 : 블럭 좌 우로 움직이기
 ///  - 키보드 화살표 아래쪽 : 블럭 빠르게 내리기(소프트 드롭)
-///  - 키보드 A : 블럭 반시계 방향으로 돌리기
+///  - 키보드 A : 블럭 반시계 방향으로 돌리기 : 
 ///  - 키보드 S : 블럭 시계 방향으로 돌리기
 ///  - 키보드 F : 블럭 바로 내리기(하드 드롭)
 ///  - 키보드 esc : 일시정지 + 메뉴 노출
@@ -671,23 +760,69 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     case WM_KEYDOWN:
     {
         switch (wParam) {
+            /// 'A' 입력을 받으면 currentPiece 를 반시계로 돌림
+            /// 처음엔 ROT_0 으로 내려오니
+            /// 'A' 누르면 ROT_270으로 바뀌어야함
+            /// ROT는 0 90 180 270 순으로
+            ///       0  1   2   3  이 존재
+            ///  
+            case 'A':   /// TODO:: 반시계 방향으로 회전 안됨
+            {
+                /// 반시계 방향으로 회전
+                /// ROT_0 부터 시작\
+                /// 'A' 를 누를 때 마다 계속 -1 이 되어야하니까
+                /// 3 -> 2 -> 1 -> 0 -> 3 -> 2 -> 1 -> 0 ,,,
+                /// -1 해버리면 rot = -1 이 되고, 0~3 에서 벗어남
+                /// (rot + 3) % 4 = 전 값
+                /// (현재 ROT_180:2 + 3) % 4 = 1
+                /// 1이 되어 ROT_90 으로 변함
+                /// 시계방향은
+                /// (rot + 1) % 4
+                /// (ROT_180:2 + 1) % 4 = 3
+                int a = ((currentPiece.rot + 3) % 4);
+                Rotation nextRot = (Rotation)a;
+                currentPiece.rot = nextRot;
+                LoadCurrentPiece();
+                InvalidateRect(hWnd, NULL, FALSE);
+            }
+            case 'S':
+            {
+                /// currentPiece 를 시계방향으로 돌리기
+                int a = ((currentPiece.rot + 1) % 4);
+                Rotation nextRot = (Rotation)a;
+                currentPiece.rot = nextRot;
+                LoadCurrentPiece();
+                InvalidateRect(hWnd, NULL, FALSE);
+            }
+            break;
             case VK_LEFT:
             {
-                blockX--;
-                CollisionDetection();
-                InvalidateRect(hWnd, NULL, TRUE);
+                /// 만약 게임보드에서 -1 만큼 움직이는게 성공했을 시
+                /// blockX-- 해주고 다시 그림
+                if (CollisionDetection(-1, 0)) {
+                    currentPiece.blockX--;
+                }
+                InvalidateRect(hWnd, NULL, FALSE);
             }
             break;
             case VK_RIGHT:
             {
-                blockX++;
-                InvalidateRect(hWnd, NULL, TRUE);
+                /// 만약 게임보드에서 +1 만큼 움직이는게 성공했을 시
+                /// blockX++ 해주고 다시 그림
+                if (CollisionDetection(1, 0)) {
+                    currentPiece.blockX++;
+                }
+                InvalidateRect(hWnd, NULL, FALSE);
             }
             break;
             case VK_DOWN:
             {
-                blockY++;
-                InvalidateRect(hWnd, NULL, TRUE);
+                /// 만약 게임 보드에서 y 가 1만큼 증가하는게 성공했을 시
+                /// blockY++ 해주고 다시 그림
+                if (CollisionDetection(0, 1)) {
+                    currentPiece.blockY++;
+                }
+                InvalidateRect(hWnd, NULL, FALSE);
             }
             break;
         }
@@ -709,10 +844,22 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     break;
     case WM_TIMER:
     {
+        /// 타이머에서 블럭이 아래 벽에 닿았을 때 멈춰야함
+        /// FixBlock(), SpawnBlock() 해줘야함
         if (wParam == 1) {
-            blockY++;
-            srand(time(NULL));
-            InvalidateRect(hWnd, NULL, TRUE);
+            /// 아래로 1칸 내려가는게 성공했을 시
+            if (CollisionDetection(0, 1)) {
+                /// 아래로 내려버림
+                currentPiece.blockY++;
+            }
+            /// 아래로 1칸 내려가는게 실패했을 시
+            else {
+                /// 블럭을 그 위치에 고정시키고
+                FixBlock();
+                /// 새로운 블럭을 생성
+                SpawnBlock();
+            }
+            InvalidateRect(hWnd, NULL, FALSE);
         }
     }
     break;
