@@ -509,48 +509,22 @@ BOOL CollisionDetection(int dx, int dy) {
 
 /// 해당 x 배열을 지우기 위한 함수
 /// y 층의 모든 배열을 지우기
-void ClearLine(int y, HWND hWnd) {
-    /// 여기서 가득 찬 배열만 지우고
-    /// 지운 배열 위에있는 Cell 들을 가져오는 함수임 
-    /// 바로 위의 Cell 들로 채울건지
-    /// 아님 흰 색 바탕으로 바꾼 뒤에 Cell 들로 채울건지 각각 해봐야겠음
-    /// 우선 흰 색 바탕으로 바꾸기
-    /// 색상만 바꾸는게 아니라 Cell 도 비워줘야함
-    for (int x = 1; x < BOARD_W - 1; x++) {
-        g_board[y][x].r = 255;
-        g_board[y][x].g = 255;
-        g_board[y][x].b = 255;
-        g_board[y][x].fix = FALSE;
-    }
-    /// 위 코드에서 셀을 흰색으로 칠하고 비웠으니까
-    /// 이제 위에 있는 블럭들을 그대로 내려보내야함
-    /// ClearLine 의 파라미터로 y 를 받았으니까
-    /// 해당하는 y 층 - 1 배열부터
-    /// y 층 배열 안에서 fix 가 하나라도 존재하는 배열 범위 안에서
-    /// 한칸씩 내려야함
-    /// 조건 1 : y 층 배열 안에 x 중 하나라도 fix == TRUE 이어야함
-    /// 그리고 지워버릴 배열은 해당 y 배열 말고
-    /// 배열 안에 fix == TRUE 가 존재한다는 가정 하에
-    /// y - 1 부터 y - n 까지(fix == TRUE 가 존재하는 배열까지)
-    for (int checkLine = y - 1; checkLine > 0; checkLine--) {
-        /// x 배열도 벽 빼고 계산
+void ClearLine(int clearY, HWND hWnd) {
+    /// FullLine 으로 부터 가져온 y 층을 검사
+    /// y 를 clearY 로 바꿔서
+    /// y 가 0 보다 클 때 까지 빼면서
+    /// 아래서 부터 위로 올라가면서 검사를 진행하게 된다
+    
+    for (int i = clearY; i > 0; i--) {
+        /// 왼쪽 벽과 오른쪽 벽을 제외하고
+        /// 지우게 될 층을 지우게 될 층 바로 윗 층으로 배열을 복사하여 덮어쓴다
+        /// 해당 층의 모든 배열을 가지고 오게 되므로 빈 칸도 마찬가지로 가져와서
+        /// 빈칸은 빈칸으로 채워지게 된다
         for (int x = 1; x < BOARD_W - 1; x++) {
-            /// y 층의 배열 x 중에 고정된 블럭이 존재한다면 그 층은 블럭이 있다는 것
-            ///
-            if (y <= 0) {
-                break;
-            }
-            if (g_board[checkLine][x].fix == TRUE) {
-                /// checkLine 에서 블럭이 하나라도 존재하는 경우
-                /// 이제 y 로 가지고 내려와야함
-                /// y = y - 1; ?
-                /// TODO:: 여기서부터 다시 시작해야함
-                /// y 층을 지운만큼 y - n ( fix 가 존재하는 경우 ) 
-                /// 배열들을 가지고 내려오게 하는 로직을 작성해야함
-            }
+            /// 지워진 층을 바로 윗 층으로 덮어쓴다
+            g_board[i][x] = g_board[i - 1][x];
         }
-    }
-
+    }  
     InvalidateRect(hWnd, NULL, FALSE);
 }
 
@@ -558,46 +532,29 @@ void ClearLine(int y, HWND hWnd) {
 void FullLine(HWND hWnd) {
     /// g_board 의 모든 라인을 조사해서
     /// y 배열의 맨 아랫줄을 빼고
-    for (int y = 0; y < BOARD_H - 1; y++) {
-        /// 먼저 isFull 이라는 BOOL 타입의 변수를 만들고
-        /// TRUE 로 선언한 뒤 모든 x 를 검사하다가
-        /// 빈 칸이 있으면 FALSE 로 바꾸고 해당 라인 검사를 끝냄
+    /// 루프의 방향은 맨 아래에서부터 맨 위 까지 검사
+    /// 그러므로 for 문의 시작은 BOARD_H - 1 부터 > 0 까지
+    for (int y = BOARD_H - 1; y > 0; y--) {
+        /// isFull 은 해당 y 배열이 가득 찼는지 확인하기 위해 존재하는 변수
         BOOL isFull = TRUE;
         for (int x = 1; x < BOARD_W - 1; x++) {
-            /// x 배열 중 벽만 빼고
             if (g_board[y][x].fix == FALSE) {
-                /// 배열이 가득 차지 않았으므로 break
                 isFull = FALSE;
                 break;
             }
         }
-        /// 해당 배열이 꽉 찬걸 확인한 후에 빨간색 바탕으로 전부 변경 후
-        /// 위의 모든 블럭들을 꽉 찬 배열 층 만큼 때겨오기
-        /// 위 코드에서 배열이 가득 찼는지 확인 했으니 바로 구현하면 될듯
-        /// 현재 y 배열에서 가득 찬 배열만 작업중임
+        /// 만약 y 배열이 가득 차있다면
         if (isFull) {
-            /// 왼쪽, 오른쪽 벽을 제외하고
-            for (int x = 1; x < BOARD_W - 1; x++) {
-                /// 빨간색으로 채울거임
-                for (int x = 1; x < BOARD_W - 1; x++) {
-                    g_board[y][x].r = 255;
-                    g_board[y][x].g = 0;
-                    g_board[y][x].b = 0;
-                    /// 해당하는 cell 의 색상을 전부 빨간색으로 바꿔버리고
-                }
-                /// WM_PAINT 를 호출시켜서
-                /// DrawGameBoard() 를 호출하여 그림을 다시 그린다
-                InvalidateRect(hWnd, NULL, FALSE);
-                /// 이제 디버깅이 끝났으니까 실제로 해당 라인을 없애버리고
-                /// 위의 블럭들을 당겨오는 과정이 필요함
-                /// 근데 바로 당겨오면 시각적으로 좋지 안으니까
-                /// 빨간색을 0.2초 정도 유지하다가
-                /// 그리고 없애고 당겨오기를 할거임
-                /// 그렇다면 InvalidateRect() 를 한 다음에
-                /// 0.2 초 뒤에 해당 배열을 clear 한 다음에
-                Sleep(20);
-                ClearLine(y, hWnd);
-            }
+            
+            InvalidateRect(hWnd, NULL, FALSE);
+            /// 바로 사라지면 어색하니 Sleep 0.2 초 걸어두기
+            Sleep(200);
+            /// 블럭 끌어내리기
+            ClearLine(y, hWnd);
+            /// 라인이 지워지고 윗줄이 내려왔으므로
+            /// 지금 막 내려온 y 층을 검사하기 위해 y 값을 증가시켜 한번 더 검사한다
+            /// y++ 하고 isFull 이 FALSE 면 알아서 스킵하게 된다
+            y++;
         }
     }
 }
@@ -622,19 +579,40 @@ void SpawnBlock() {
     /// 그리고 currentPiece 의 색상도 미리 정해줘야함
     switch (currentPiece.type) {
     case I:
-        currentPiece.r = 0; currentPiece.g = 255; currentPiece.b = 255; break;
+        currentPiece.r = 0; 
+        currentPiece.g = 255; 
+        currentPiece.b = 255; 
+        break;
     case O:
-        currentPiece.r = 255; currentPiece.g = 255; currentPiece.b = 0; break;
+        currentPiece.r = 255; 
+        currentPiece.g = 255; 
+        currentPiece.b = 0; 
+        break;
     case T:
-        currentPiece.r = 128; currentPiece.g = 0; currentPiece.b = 128; break;
+        currentPiece.r = 128; 
+        currentPiece.g = 0; 
+        currentPiece.b = 128;
+        break;
     case S:
-        currentPiece.r = 0; currentPiece.g = 255; currentPiece.b = 0; break;
+        currentPiece.r = 0;
+        currentPiece.g = 255;
+        currentPiece.b = 0;
+        break;
     case Z:
-        currentPiece.r = 255; currentPiece.g = 0; currentPiece.b = 255; break;
+        currentPiece.r = 255; 
+        currentPiece.g = 0; 
+        currentPiece.b = 255;
+        break;
     case J:
-        currentPiece.r = 0; currentPiece.g = 0; currentPiece.b = 255; break;
+        currentPiece.r = 0; 
+        currentPiece.g = 0;
+        currentPiece.b = 255; 
+        break;
     case L:
-        currentPiece.r = 255; currentPiece.g = 165; currentPiece.b = 0; break;
+        currentPiece.r = 255; 
+        currentPiece.g = 165; 
+        currentPiece.b = 0;
+        break;
     }
 
     LoadCurrentPiece();
@@ -857,6 +835,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             /// ROT는 0 90 180 270 순으로
             ///       0  1   2   3  이 존재
             ///
+            /// TODO:: 추후에 블럭을 빠르게 돌리면 끼임이나 덮어쓰는 현상을 고쳐야함 버그임
             case 'A':
             {
                 /// 반시계 방향으로 회전

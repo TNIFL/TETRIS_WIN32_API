@@ -1,9 +1,4 @@
-﻿# ==============================
-# Visual Studio C++ 프로젝트 기본 .gitignore
-# ==============================
-
-# Visual Studio 사용자 설정
-.vs/
+﻿.vs/
 *.suo
 *.user
 *.userosscache
@@ -26,7 +21,6 @@ x86/
 *.log
 
 # 프로젝트 파일
-*.vcxproj*
 *.filters
 
 # 기타
