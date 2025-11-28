@@ -20,15 +20,11 @@ x86/
 *.cache
 *.log
 
-# 프로젝트 파일
-*.filters
 
 # 기타
 *.db
 *.sdf
 *.opensdf
-*.sln
-*.vcproj
 *.ncb
 *.sbr
 *.tlb
@@ -43,3 +39,8 @@ x86/
 *.swp
 *.DS_Store
 Thumbs.db
+
+# 솔루션과 프로젝트 파일은 올리기
+!*.sln
+!*.vcxproj
+!*.filters
