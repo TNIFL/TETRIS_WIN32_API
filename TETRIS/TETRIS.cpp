@@ -286,6 +286,14 @@ struct Cell {
 
 Cell g_board[BOARD_H][BOARD_W];
 
+/// 현재 점수
+int currentScore;
+
+/// SetTimer 에서 사용할 초 변수
+/// 처음에는 1초
+/// 1초 라는것은 블럭이 생성될 때 까지 걸리는 시간 + 블럭이 내려오는데 걸리는 시간을 뜻한다
+int second = 1000;
+
 /// g_board 에도 색상을 넣기 위해서는 색상 정보를 저장할 변수들이 필요함
 /// 그렇다면 차라리 g_board도 구조체로 만들어버림
 /// cell 구조체를 만들고
@@ -386,6 +394,7 @@ void DrawGameBoard(HWND hWnd, HDC hdc) {
     }
 }
 
+
 /// 현재 내가 조작하고 있는 블럭 종류
 /// SpawnBlock 할 때 값을 할당해줄거임
 int currentBlock[4][4];   /// 현재 조작중인 블럭 4 x 4 크기
@@ -402,27 +411,90 @@ void DrawDownBlock(HWND hWnd, HDC hdc) {
     
 }
 
-/// 현재 점수를 보여줄 영역
-/// 점수 영역은 게임 플레이 영역의 위 쪽
-/// 게임 플레이 영역과 가로의 길이가 같다
-/// 세로 길이는 50px?
+void calcScore(int count) {
+    if (count == 1) {
+        currentScore += 100;
+    }
+    else if (count == 2) {
+        currentScore += 300;
+    }
+    else if (count == 3) {
+        currentScore += 500;
+    }
+    else {
+        currentScore += 800;
+    }
+}
 
 /// 스코어 보드의 위치는 10,10 에서 그려지기 시작함
 const int SCORE_ORIGIN_X = 70;
 const int SCORE_ORIGIN_Y = 10;
+
 void DrawScoreBoard(HWND hWnd, HDC hdc) {
     Rectangle(hdc, SCORE_ORIGIN_X, SCORE_ORIGIN_Y, SCORE_ORIGIN_X + (BLOCK * BOARD_W), SCORE_ORIGIN_Y + 50);
+    /// Rect 안에 현재 점수를 넣고 점수가 들어올 때 마다 계속 갱신해야함
+    /// Rect 안에 현재 점수를 출력시킴
+    WCHAR buf[16] = { 0, };
+    wsprintfW(buf, L"현재 점수");
+    TextOut(hdc, (SCORE_ORIGIN_X + (BLOCK * BOARD_W)) / 2, SCORE_ORIGIN_Y - 7, buf, lstrlenW(buf));
+
+    memset(buf, 0x00, 0);
+
+    /// 현재 점수를 계속 갱신 해야함
+    /// 원래 점수에 계속 + 
+    
+    wsprintfW(buf, L"%d", currentScore);
+    TextOut(hdc, (SCORE_ORIGIN_X + (BLOCK * BOARD_W)) / 2 + 30, SCORE_ORIGIN_Y + 15, buf, lstrlenW(buf));
+
 }
+
 
 /// 최고점수 영역 그리기
-void DrawHighScoreBoard(HWND hWnd, HDC hdc) {
+void DrawHighScoreBoard(HDC hdc) {
+    /// 최고 점수 영역은
+    /// 다음 블럭 영역의 바로 아래에 30 px 떨어져서 존재한다
+    int left = 30 + SCORE_ORIGIN_X + BLOCK * BOARD_W;
+    int top = SCORE_ORIGIN_Y + 60 + 180 + 30;
+    int right = left + 180;
+    int bottom = top + 120;
+    Rectangle(hdc, left, top, right, bottom);
+    /// 화면에 "최고 점수" 출력
+    WCHAR buf[16] = { 0, };
+    wsprintfW(buf, L"최고 점수");
+    TextOut(hdc, left + 56, top - 7, buf, lstrlenW(buf));
+}
+
+/// 다음 블럭 영역 그리기
+void DrawNextBlockArea(HDC hdc) {
+    /// 다음 블럭 영역은 오른쪽 맨 위에 크기는 약 300 x 200
+    /// 시작점은 어디에 위치해야하는가
+    /// left   : 2 * SCORE_ORIGIN_X + BLOCK * BOARD_W
+    /// top    : SCORE_ORIGIN_Y
+    /// right  : left + 300
+    /// bottom : top + 180 -> 테트로미노 중 가장 긴 블럭이 I 인데 이걸 세우면
+    ///          총 120 의 세로 길이를 가지게 된다
+    ///          여유 공간을 고려하여 위 아래 여유롭게 30 30 공간을 주면 좋을듯
+    int left = 30 + SCORE_ORIGIN_X + BLOCK * BOARD_W;
+    int top = SCORE_ORIGIN_Y + 60;
+    int right = left + 180;
+    int bottom = top + 180;
+    Rectangle(hdc, left, top, right, bottom);
+    /*
+     WCHAR buf[32] = { 0, };
+    wsprintfW(buf, L"KEYDOWN: %d", wParam);
+    HDC hdc = GetDC(hWnd);
+    TextOut(hdc, 300, 10, buf, lstrlenW(buf));
+
+    ReleaseDC(hWnd, hdc);
+    */
+    /// 화면에 "다음 블럭" 출력
+    WCHAR buf[16] = { 0, };
+    wsprintfW(buf, L"다음 블럭");
+    TextOut(hdc, left + 56, top - 7, buf, lstrlenW(buf));
+
 
 }
-/// 다음 블럭 영역 그리기(최고점수 영역 바로 아래)
-void DrawNextBlockArea() {
-
-}
-/// 다음 레벨 알려주는 영역 그리기(다음 블럭 영역 그리기 바로 아래)
+/// 다음 레벨 알려주는 영역 그리기
 void DrawNextLevelArea() {
 
 }
@@ -514,7 +586,6 @@ void ClearLine(int clearY, HWND hWnd) {
     /// y 를 clearY 로 바꿔서
     /// y 가 0 보다 클 때 까지 빼면서
     /// 아래서 부터 위로 올라가면서 검사를 진행하게 된다
-    
     for (int i = clearY; i > 0; i--) {
         /// 왼쪽 벽과 오른쪽 벽을 제외하고
         /// 지우게 될 층을 지우게 될 층 바로 윗 층으로 배열을 복사하여 덮어쓴다
@@ -524,12 +595,14 @@ void ClearLine(int clearY, HWND hWnd) {
             /// 지워진 층을 바로 윗 층으로 덮어쓴다
             g_board[i][x] = g_board[i - 1][x];
         }
-    }  
+    }
     InvalidateRect(hWnd, NULL, FALSE);
 }
 
 /// 배열이 가득 찼으면 그 라인을 터뜨리고 위의 라인을 가져오는 함수
+/// 이 함수 내부에서 점수 갱신도 해야함
 void FullLine(HWND hWnd) {
+    int count = 0;
     /// g_board 의 모든 라인을 조사해서
     /// y 배열의 맨 아랫줄을 빼고
     /// 루프의 방향은 맨 아래에서부터 맨 위 까지 검사
@@ -543,19 +616,23 @@ void FullLine(HWND hWnd) {
                 break;
             }
         }
+        
         /// 만약 y 배열이 가득 차있다면
         if (isFull) {
-            
             InvalidateRect(hWnd, NULL, FALSE);
             /// 바로 사라지면 어색하니 Sleep 0.2 초 걸어두기
             Sleep(200);
             /// 블럭 끌어내리기
             ClearLine(y, hWnd);
+            count++;
             /// 라인이 지워지고 윗줄이 내려왔으므로
             /// 지금 막 내려온 y 층을 검사하기 위해 y 값을 증가시켜 한번 더 검사한다
             /// y++ 하고 isFull 이 FALSE 면 알아서 스킵하게 된다
             y++;
         }
+    }
+    if (count > 0) {
+        calcScore(count);
     }
 }
 
@@ -638,6 +715,8 @@ void DrawCurrentBlock(HWND hWnd, HDC hdc) {
             }
         }
     }
+    SelectObject(hdc, osBrush);
+    DeleteObject(myBrush);
 }
 
 /*
@@ -814,6 +893,26 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 /// 이 블럭들은 기준점이 있음
 /// 기준점을 중심으로 좌로가면 -, 우로가면 +, 
 /// 
+/// 현재 진행상황은
+/// 블럭이 랜덤으로 생성되고
+/// 블럭을 쌓고, 층이 가득 차면 비워버린 뒤에 위의 층을 덮어쓰는
+/// 기본적인 테트리스 구조는 완성시켰음
+/// 여기에 추가해야할것은
+/// 이쁘기 꾸미기
+/// 현재 점수 영역
+/// 이 게임에서의 최고 점수 영역
+/// 다음 블럭 영역
+/// 다음 레벨 영역
+/// 을 만들어야함
+/// 
+/// 추가해야하는것
+/// 점수가 높아지면 높아질수록 블럭들이 점점 빠르게 내려오도록 해야함
+/// 이제 점수를 추가해야함
+/// 싱글라인 클리어     : 100 점
+/// 더블라인 클리어     : 300 점
+/// 트리플라인 클리어   : 500 점
+/// 테트리스라인 클리어 : 800 점
+/// 라인 클리어 말고도 많은 배점이 있지만 우선 이것들부터 적용하고 시작
 
 /// 키보드 입력
 ///  - 키보드 화살표 왼쪽, 오른쪽 : 블럭 좌 우로 움직이기
@@ -908,12 +1007,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         InitBoard();
         SpawnBlock();
         /// 타이머 생성
-        /// 0.5 초 마다 호출되는 타이머 ID = 1
-        SetTimer(hWnd, 1, 900, NULL);
+        /// 0.1 초 마다 호출되는 타이머 ID = 1
+        /// 점수가 올라갈 때 마다 블럭 생성되는 시간이 점점 줄어들면서
+        /// 블럭이 내려오는 속도도 점점 빨라지게
+        /// 그럼 초 를 담는 변수를 전역으로 선언해둔다
+        SetTimer(hWnd, 1, second, NULL);
         
     }
     break;
-    case WM_TIMER:
+    case WM_TIMER:  /// TODO:: 타이머를 사용해서 특정 점수마다 블럭 내려오는 속도를 빠르게 만들어야함
     {
         /// 타이머에서 블럭이 아래 벽에 닿았을 때 멈춰야함
         /// FixBlock(), SpawnBlock() 해줘야함
@@ -960,6 +1062,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
             DrawGameBoard(hWnd, hdc);
             DrawScoreBoard(hWnd, hdc);
+            DrawNextBlockArea(hdc);
+            DrawHighScoreBoard(hdc);
             DrawCurrentBlock(hWnd, hdc);
             EndPaint(hWnd, &ps);
         }
