@@ -288,11 +288,17 @@ Cell g_board[BOARD_H][BOARD_W];
 
 /// 현재 점수
 int currentScore;
+/// 1000 점 단위로 속도가 점점 빨라짐
+int nextSpeedUpScore = 1000;
 
 /// SetTimer 에서 사용할 초 변수
 /// 처음에는 1초
 /// 1초 라는것은 블럭이 생성될 때 까지 걸리는 시간 + 블럭이 내려오는데 걸리는 시간을 뜻한다
 int second = 1000;
+
+/// 현재 턴에서 저장하기를 사용했는지 알기위한 BOOL 타입의 전역변수
+/// 이 변수는 새로운 블럭이 스폰 될 때 마다 FALSE 로 초기화 시켜야함
+BOOL usedSaveBlockThisTurn;
 
 /// g_board 에도 색상을 넣기 위해서는 색상 정보를 저장할 변수들이 필요함
 /// 그렇다면 차라리 g_board도 구조체로 만들어버림
@@ -442,12 +448,11 @@ void DrawScoreBoard(HWND hWnd, HDC hdc) {
 
     /// 현재 점수를 계속 갱신 해야함
     /// 원래 점수에 계속 + 
-    
+
     wsprintfW(buf, L"%d", currentScore);
     TextOut(hdc, (SCORE_ORIGIN_X + (BLOCK * BOARD_W)) / 2 + 30, SCORE_ORIGIN_Y + 15, buf, lstrlenW(buf));
 
 }
-
 
 /// 최고점수 영역 그리기
 void DrawHighScoreBoard(HDC hdc) {
@@ -477,7 +482,7 @@ void DrawNextBlockArea(HDC hdc) {
     int left = 30 + SCORE_ORIGIN_X + BLOCK * BOARD_W;
     int top = SCORE_ORIGIN_Y + 60;
     int right = left + 180;
-    int bottom = top + 180;
+    int bottom = top + 160;
     Rectangle(hdc, left, top, right, bottom);
     /*
      WCHAR buf[32] = { 0, };
@@ -491,9 +496,84 @@ void DrawNextBlockArea(HDC hdc) {
     WCHAR buf[16] = { 0, };
     wsprintfW(buf, L"다음 블럭");
     TextOut(hdc, left + 56, top - 7, buf, lstrlenW(buf));
-
-
 }
+
+/// 저장을 하기 위해서는 Piece 타입의 전역변수로 선언해두고
+Piece saveBlock;
+/// BOOL 타입의 전역변수 하나 선언해두기
+/// 현재 저장된 블럭이 있는지
+/// 만약 저장된 블럭이 있다면 추가적으로 저장하지 못하게 만들어야함
+/// 처음 시작했을 때 에는 FALSE 로 두어서 저장된 블럭이 없다는것을 알림
+BOOL hasSaveBlock = FALSE;
+
+int blockToSave[4][4];
+
+void LoadSavePiece() {
+    for (int y = 0; y < 4; y++) {
+        for (int x = 0; x < 4; x++) {
+            /// 저장한 블럭을 화면에 노출시키기 위해 저장한 블럭의 정보들로 덮어쓰기
+            blockToSave[y][x] = TETROMINO[saveBlock.type][saveBlock.rot][y][x];
+        }
+    }
+}
+
+/// 현재 블럭을 저장하고 나중에 꺼내 쓸 수 있게 해주는 영역
+/// 블럭이 생성되어서 내려오는 도중에 특정 키를 누르면
+/// 내려오고 있는 블럭을 저장하고
+/// 나중에 꺼내쓸 수 있음
+/// 저장 공간은 한개
+/// 이미 저장이 되어있다면 사용 후 저장할 수 있음
+/// saveBlockArea는 다음 블럭 영역 바로 아래에 둘거임
+/// 
+/// 그리고 저장된 블럭이 이미 있다면 현재 블럭이랑 스왑하는 형식으로 해야할듯
+void DrawSaveBlockArea(HWND hWnd) {
+    HDC hdc = GetDC(hWnd);
+    int left = 30 + SCORE_ORIGIN_X + BLOCK * BOARD_W;
+    int top = SCORE_ORIGIN_Y + 60 + 180 + 30;
+    int right = left + 180;
+    int bottom = top + 180;
+    Rectangle(hdc, left, top, right, bottom);
+    WCHAR str[32] = { 0, };
+    wsprintf(str, L"저장한 블럭");
+    TextOut(hdc, left + 50, top - 7, str, lstrlenW(str));
+
+    /// 맨 마지막에 saveBlock 을 그린다
+    /// Piece 구조체에 존재하는 blockX, blockY 를 사용할수는 없다
+    /// blockX, blockY 는 게임보드의 좌표를 따르기 때문
+    
+    /// 저장된 블럭이 있다면 return;
+    if (!hasSaveBlock) {
+        ReleaseDC(hWnd, hdc);
+        return;
+    }
+    LoadSavePiece();
+    
+    /// 새로운 좌표를 추가해야한다
+    /// 우선 브러쉬를 만들고
+    HBRUSH myBrush = CreateSolidBrush(RGB(
+        saveBlock.r, saveBlock.g, saveBlock.b
+    )); /// 저장된 블럭의 색깔
+    HBRUSH osBrush = (HBRUSH)SelectObject(hdc, myBrush);
+
+    for (int y = 0; y < 4; y++) {
+        for (int x = 0; x < 4; x++) {
+            if (blockToSave[y][x] == 1) {
+                /// 화면에 출력하기 위한 x, y 좌표
+                /// fx = fix x => ORIGIN_X + BLOCK * BOARD_W + 30 + 90
+                /// fy = fix y => ORIGIN_Y + 50 + 400
+                int fx = left + 30 + x * BLOCK;
+                int fy = top + 30 + y * BLOCK;
+
+                Rectangle(hdc, fx, fy, fx + BLOCK, fy + BLOCK);
+            }
+        }
+    }
+    /// 위에서 블럭을 저장했으니 TRUE 로 바꿔서 추가적으로 저장하지 못하게 해야함
+    hasSaveBlock = TRUE;
+
+    ReleaseDC(hWnd, hdc);
+}
+
 /// 다음 레벨 알려주는 영역 그리기
 void DrawNextLevelArea() {
 
@@ -537,6 +617,21 @@ void FixBlock() {
 /// 다음에 나올 블럭을 미리 보여줌
 void ShowNextBlock() {
 
+}
+
+/// 현재 속도를 보여주는 영역
+void ShowCurrentSecond(HWND hWnd) {
+    HDC hdc = GetDC(hWnd);
+    int left = 800;
+    int top = 100;
+    int right = 1000;
+    int bottom = 200;
+
+    Rectangle(hdc, left, top, right, bottom);
+    WCHAR str[32] = { 0, };
+    wsprintf(str, L"현재 속도 : %d", second);
+    TextOut(hdc, 900, 150, str, lstrlenW(str));
+    
 }
 
 void LoadCurrentPiece() {
@@ -640,7 +735,7 @@ void FullLine(HWND hWnd) {
 
 /// 블럭을 스폰시킴
 void SpawnBlock() {
-    
+    usedSaveBlockThisTurn = FALSE;
     /// 초기 블럭의 스폰 위치는 y : 70px, x : 220px 또는 250px
     /// 랜덤함수를 이용해서 0~6 사이의 값을 하나 받음
     /// 그 값에 해당하는 테트로미노를 하나 생성함
@@ -917,9 +1012,11 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 /// 키보드 입력
 ///  - 키보드 화살표 왼쪽, 오른쪽 : 블럭 좌 우로 움직이기
 ///  - 키보드 화살표 아래쪽 : 블럭 빠르게 내리기(소프트 드롭)
+///  - 키보드 화살표 위 쪽 : 블럭 바로 내리기 (하드 드롭)
 ///  - 키보드 A : 블럭 반시계 방향으로 돌리기 : 
 ///  - 키보드 S : 블럭 시계 방향으로 돌리기
-///  - 키보드 F : 블럭 바로 내리기(하드 드롭)
+///  - 키보드 F : 저장한 블럭 꺼내쓰기
+///  - 키보드 D : 블럭 저장하기
 ///  - 키보드 esc : 일시정지 + 메뉴 노출
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
@@ -963,6 +1060,83 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 currentPiece.rot = nextRot;
                 LoadCurrentPiece();
                 InvalidateRect(hWnd, NULL, FALSE);
+            }
+            break;
+            case 'D':
+            {
+                /// 만약 usedSaveBlockThisTurn 이 TRUE 라면
+                /// 이미 이번 턴에 블럭 저장을 했기 때문에
+                /// 더 이상 저장하지 못하게 break; 로 넘아가야함
+                if (usedSaveBlockThisTurn) {
+                    break;
+                }
+                /// 저장된 블럭이 없다면 현재 블럭을 저장시키고
+                /// 새로운 블럭을 생성시킨다
+                if (!hasSaveBlock) {
+                    /// 저장된 블럭이 없는 상태에서 D 를 누르면 현재 내려오는 블럭이 저장되고
+                    /// 저장된 블럭이 있는 상태에서 D 를 누르면 현재 블럭이 저장된 블럭으로 바뀐다
+                    /// 동시에 현재 내려오던 블럭은 그냥 없애버린다
+                    /// 만약 저장된 블럭이 없는 상태에서 D 를 눌렀다면
+                    /// currentPiece 를 saveBlock 에 저장시키고 바로 새로운 블럭을 내려보낸다
+
+                    /// saveBlock 에 currentPiece 를 저장시키고
+                    saveBlock = currentPiece;
+                    /// 아래의 초기화 과정을 해야할지 모르겠음
+                    /// 어차피 SpawnBlock 하면 덮어쓰이는거 아닌가?
+
+                    /// currentPiece 를 초기화 시켜야함
+                    currentPiece.blockX = NULL;
+                    currentPiece.blockY = NULL;
+                    currentPiece.rot = (Rotation)NULL;
+                    currentPiece.type = (TetrominiType)NULL;
+                    currentPiece.r = NULL;
+                    currentPiece.g = NULL;
+                    currentPiece.b = NULL;
+                    hasSaveBlock = TRUE;
+                    /// 초기화 해서 currentPiece 를 없애버렸으니 바로 새로운 블럭을 생성시킨다
+                    SpawnBlock();
+                }
+                /// 이미 저장된 블럭이 있다면
+                /// 현재 블럭과 스왑해준다
+                /// 그리고 한개의 블럭이 내려오는 동안에는
+                /// 저장은 무조건 한번만 가능하게
+                /// 여러번 저장하게 된다면 끝도없이 저장할수있어서
+                /// 논리적으로 문제가 생긴다
+                else if (hasSaveBlock) {
+                    usedSaveBlockThisTurn = TRUE;
+                    Piece copyData;
+                    copyData = saveBlock;
+                    saveBlock = currentPiece;
+                    currentPiece = copyData;
+                }
+                /// TODO:: 수정해야 할 것들
+                /// 벽에 끼이는 거
+                /// 저장 한 블럭 불러 올 때 색상 바뀌고
+                /// 상호작용 하기 전 까지는 블럭 색상만 반영이 된다
+                
+            }
+            break;
+            case 'F':
+            {
+                /// F 키를 누르면 현재 저장되어있는 블럭을 꺼내쓸거임
+                /// 내려오고 있는 currentBlock 은 없애버리고
+                /// saveBlock 을 꺼내온다
+                /// 그리고 동시에 처음 위치에서 다시 내려오게 해야함
+                /// 저장된 블럭이 없는 경우는 아무것도 안한다
+                if (!hasSaveBlock) {
+                    break;
+                }
+                /// 저장된 블럭을 가지고 있을 때 에만 작동하게
+                else {
+                    /// 이미 내려고오 있는 currentPiece 를 덮어쓴다
+                    currentPiece = saveBlock;
+                    /// 그리고 처음부터 내려오게
+                    currentPiece.blockX = BOARD_W / 2 - 2;
+                    currentPiece.blockY = 0;
+                    /// 현재 저장된 블럭을 불러와서 사용 했으니
+                    /// 저장된 블럭이 없다는것을 알려줘야함
+                    hasSaveBlock = FALSE;
+                }
             }
             break;
             case VK_LEFT:
@@ -1020,6 +1194,27 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         /// 타이머에서 블럭이 아래 벽에 닿았을 때 멈춰야함
         /// FixBlock(), SpawnBlock() 해줘야함
         if (wParam == 1) {
+            /// 초기 속도를 정한 뒤 
+            /// 만약 초기 속도랑 현재 속도랑 다르다면
+            /// 그 때 타이머를 죽이고 새로 만들어야함
+            /// 이미 second 가 있으니까
+            if (currentScore >= nextSpeedUpScore)
+            {
+                /// 속도 증가
+                second -= 100;
+                
+                if (second < 100) {
+                    /// 속도가 0.1 초 이하로 내려가면 
+                    /// 10 씩 줄이기
+                    second -= 10;
+                }
+                /// 타이머를 죽이고 다시 생성
+                KillTimer(hWnd, 1);
+                SetTimer(hWnd, 1, second, NULL);
+
+                // 다음 목표 점수 갱신
+                nextSpeedUpScore += 1000;
+            }
             /// 아래로 1칸 내려가는게 성공했을 시
             if (CollisionDetection(0, 1)) {
                 /// 아래로 내려버림
@@ -1065,6 +1260,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             DrawNextBlockArea(hdc);
             DrawHighScoreBoard(hdc);
             DrawCurrentBlock(hWnd, hdc);
+            DrawSaveBlockArea(hWnd);
+            ShowCurrentSecond(hWnd);
             EndPaint(hWnd, &ps);
         }
         break;
