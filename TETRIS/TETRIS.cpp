@@ -643,7 +643,67 @@ void LoadCurrentPiece() {
     }
 }
 
+/// 아래 함수는 화살표 DOWN 에 대한 충돌감지만 수행한다
+/// 키보드 'A', 'S' 에 관한 충돌감지 함수도 제작해야한다
+/// 
+/// 벽, fix 된 블럭 둘 다 끼이는 상황
+/// 내려오는 블럭이 끼이지 않게
+/// 블럭을 돌리기 전에 돌아갈 수 있는지를 확인부터 하고 안된다면 돌리지 않는다
+/// 반대도 마찬가지로 검사부터 하고 안된다면 돌리지 않는다
+
+/// 여기서 A, S 에 대한 충돌감지 코드 작성
+/// A S 중 어떤걸 파라미터로 가져오는지 알아야함
+bool CollisionDetectAS(WPARAM key) {
+    /// currnetBlock 의 y, x 좌표를 이용해서
+    /// 키보드 A, S 가 눌렸을 때 돌아가는 과정에서
+    /// 벽이나 블럭이 존재하는지 확인 한 후에
+    /// 만약 존재한다면 돌아가지 못하게, 존재하지 않는다면 돌아가게 만들어야한다
+    
+    int nx = 0;
+    int ny = 0;
+    for (int y = 0; y < 4; y++) {
+        for (int x = 0; x < 4; x++) {
+            /// 현재 블럭이 존재하는 좌표와
+            /// 게임 보드에서의 존재하는 블럭의 좌표를 비교한다
+            nx = currentPiece.blockX + x;
+            ny = currentPiece.blockY + y;
+            
+            /// nx, ny 를 구한 뒤 
+            /// 게임 보드에서 nx, ny 좌표와 겹치는 물체가 있다면 FALSE 반환
+        }
+    }
+
+    /// A 는 현재 내려오는 블럭을 왼쪽으로 돌릴 때
+    if (key == 'A') {
+        /// 게임 보드 내부의 벽들을 확인한다
+        ///
+        for (int y = BOARD_H - 1; y > 0; y--) {
+            for (int x = 1; x < BOARD_W - 1; x++) {
+                /// 만약 벽이랑 내가 회전하려고 하는 좌표가
+                /// 겹친다면 현재 내려오는 블럭을 반대로 
+                /// 1 칸씩 밀어버린다
+
+                
+            }
+        }
+    }
+    /// S 는 현재 내려오는 블럭을 오른쪽으로 돌릴 때
+    if (key == 'S') {
+
+    }
+    /// 현재 블럭이 방향을 전환하려고 하는데
+    /// 현재 블럭 기준으로 왼쪽, 오른쪽에
+    /// g_board[y][x].fix == 1 || g_board[y][x].isWall == 1
+    /// 이라면 반대 방향으로 현재 블럭의 모든 요소를
+    /// 1칸 씩 밀어버리고
+    /// 밀어버리는게 끝나면 그 때 돌린다
+    
+    /// 아래의 반복문은 fix가 TRUE 인 블럭을 확인하는 반복문
+    return FALSE;
+}
+
 /// 벽에 닿았을 때 넘어가지 않게 해줌
+/// 여기서 내려오는 블럭이 게임 보드에 끼이지 않게 수정해야함
 BOOL CollisionDetection(int dx, int dy) {
     /// dx, dy 는 움직일 양을 뜻함
     /// 왼쪽 벽, 오른쪽 벽, 아래 벽 에 닿았을 때 넘어가지 않게 해줌
@@ -661,6 +721,7 @@ BOOL CollisionDetection(int dx, int dy) {
 
             /// 움직이고 나서 보드 밖으로 나갔는지 확인
             if (nx < 0 || nx >= BOARD_W || ny < 0 || ny >= BOARD_H) {
+
                 return FALSE;
             }
             /// g_board[ny][nx] 가 1 이면 벽임
@@ -1032,6 +1093,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             ///       0  1   2   3  이 존재
             ///
             /// TODO:: 추후에 블럭을 빠르게 돌리면 끼임이나 덮어쓰는 현상을 고쳐야함 버그임
+            
+            /// 'A'와 'S' KEYDOWN 이 왔을 때
+            /// CollisionDetectAS() 함수가 호출되어야한다
             case 'A':
             {
                 /// 반시계 방향으로 회전
@@ -1045,9 +1109,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 /// 시계방향은
                 /// (rot + 1) % 4
                 /// (ROT_180:2 + 1) % 4 = 3
-                int a = ((currentPiece.rot + 3) % 4);
+                /// 
+                /// 아래의 변수들은 무작정 블럭을 돌리기만 한다
+                /// 이 변수들을 CollisionDetectAS 로 옮겨서 검사를 해야함
+                
+                /// 만약 A S 로 현재 내려오는 블럭을 움직이는게 성공했을 시
+                /// A S 의 방향으로 현재 내려오는 블럭을 움직이게 한다
+                
+                int a = ((currentPiece.rot + 3) % 4); /// 0 ~ 3 의 enum 존재
                 Rotation nextRot = (Rotation)a;
                 currentPiece.rot = nextRot;
+
                 LoadCurrentPiece();
                 InvalidateRect(hWnd, NULL, FALSE);
             }
@@ -1055,11 +1127,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             case 'S':
             {
                 /// currentPiece 를 시계방향으로 돌리기
+                /// 마찬가지로 CollisionDetectAS 에서
+                /// S 방향으로 블럭 돌리는게 가능하다면 돌리고
+                /// 안된다면 안돌린다
+                WPARAM key = wParam;
+                
                 int a = ((currentPiece.rot + 1) % 4);
                 Rotation nextRot = (Rotation)a;
                 currentPiece.rot = nextRot;
                 LoadCurrentPiece();
                 InvalidateRect(hWnd, NULL, FALSE);
+             
             }
             break;
             case 'D':
