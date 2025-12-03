@@ -574,6 +574,20 @@ void DrawSaveBlockArea(HWND hWnd) {
     ReleaseDC(hWnd, hdc);
 }
 
+/// 게임오버를 알리는 기능 구현
+/// 게임 오버의 조건은 블럭이 생성되는 영역 까지 fix 된 블럭들이 쌓여 닿았을 시
+/// 단순히 새로 스폰된 블럭이 fix 블럭과 닿는다면 게임오버시킨다
+/// bool 타입으로 WM_TIMER 의 SpawnBlock() 위에서 GameOver 인지 검사한다
+bool GameOver() {
+    /// 게임 오버 검사는 새로 생성되는 블럭과 닿는다면 게임 오버
+    /// 하지만 지금 여기서 그렇게 하면 논리적 오류가 생긴다
+    /// 게임 오버를 확인하기 위해서는 블럭을 먼저 생성해야하는데
+    /// 블럭을 생성하기 전에 게임오버를 검사하기 때문에 논리적 오류가 생겨 정상작동을 안한다
+    /// 그렇다면 블럭을 SpawnBlock() 한다음에 fix 된 블럭과 닿는지 확인을 한다
+    return TRUE;
+}
+
+
 /// 다음 레벨 알려주는 영역 그리기
 void DrawNextLevelArea() {
 
@@ -629,8 +643,8 @@ void ShowCurrentSecond(HWND hWnd) {
 
     Rectangle(hdc, left, top, right, bottom);
     WCHAR str[32] = { 0, };
-    wsprintf(str, L"현재 속도 : %d", second);
-    TextOut(hdc, 900, 150, str, lstrlenW(str));
+    wsprintf(str, L"현재 속도 : %d    ", second);
+    TextOut(hdc, 850, 150, str, lstrlenW(str));
     
 }
 
@@ -653,7 +667,7 @@ void LoadCurrentPiece() {
 
 /// 여기서 A, S 에 대한 충돌감지 코드 작성
 /// A S 중 어떤걸 파라미터로 가져오는지 알아야함
-bool CollisionDetectAS(WPARAM key) {
+bool CollisionDetectAS(Rotation nextRot) {
     /// currnetBlock 의 y, x 좌표를 이용해서
     /// 키보드 A, S 가 눌렸을 때 돌아가는 과정에서
     /// 벽이나 블럭이 존재하는지 확인 한 후에
@@ -663,43 +677,35 @@ bool CollisionDetectAS(WPARAM key) {
     int ny = 0;
     for (int y = 0; y < 4; y++) {
         for (int x = 0; x < 4; x++) {
+
+            /// 회전 후 모양에서 블럭의 값이 1 인 부분만 검사한다
+            if (TETROMINO[currentPiece.type][nextRot][y][x] == 0) {
+                continue;
+            }
+
             /// 현재 블럭이 존재하는 좌표와
             /// 게임 보드에서의 존재하는 블럭의 좌표를 비교한다
             nx = currentPiece.blockX + x;
             ny = currentPiece.blockY + y;
             
+            /// 보드 밖으로 나가면 회전 불가
+            if (nx < 0 || nx >= BOARD_W || ny < 0 || ny >= BOARD_H) {
+                return FALSE;
+            }
+
+            /// 벽이나 고정 블럭이랑 겹치면 회전 불가
+            if (g_board[ny][nx].isWall || g_board[ny][nx].fix) {
+                return FALSE;
+            }
+
             /// nx, ny 를 구한 뒤 
             /// 게임 보드에서 nx, ny 좌표와 겹치는 물체가 있다면 FALSE 반환
+            
+            
         }
     }
 
-    /// A 는 현재 내려오는 블럭을 왼쪽으로 돌릴 때
-    if (key == 'A') {
-        /// 게임 보드 내부의 벽들을 확인한다
-        ///
-        for (int y = BOARD_H - 1; y > 0; y--) {
-            for (int x = 1; x < BOARD_W - 1; x++) {
-                /// 만약 벽이랑 내가 회전하려고 하는 좌표가
-                /// 겹친다면 현재 내려오는 블럭을 반대로 
-                /// 1 칸씩 밀어버린다
-
-                
-            }
-        }
-    }
-    /// S 는 현재 내려오는 블럭을 오른쪽으로 돌릴 때
-    if (key == 'S') {
-
-    }
-    /// 현재 블럭이 방향을 전환하려고 하는데
-    /// 현재 블럭 기준으로 왼쪽, 오른쪽에
-    /// g_board[y][x].fix == 1 || g_board[y][x].isWall == 1
-    /// 이라면 반대 방향으로 현재 블럭의 모든 요소를
-    /// 1칸 씩 밀어버리고
-    /// 밀어버리는게 끝나면 그 때 돌린다
-    
-    /// 아래의 반복문은 fix가 TRUE 인 블럭을 확인하는 반복문
-    return FALSE;
+    return TRUE;
 }
 
 /// 벽에 닿았을 때 넘어가지 않게 해줌
@@ -848,7 +854,12 @@ void SpawnBlock() {
         break;
     }
 
+    /// 여기서 게임오버 확인함
+    /// 새로 스폰된 블럭이 움직이지 않은 상태에서
+    /// 현재 fix 된 블럭과 좌표가 겹치는게 하나라도 있으면 게임 오버시킴
+
     LoadCurrentPiece();
+    /// 먼저 LoadCurrentPiece() 한 다음에 바로 닿는게 있다면 게임종료
     
 }
 
@@ -1041,7 +1052,6 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 /// 
 /// 배열의 선언은 boolean 으로 해도 되려나 ?
 /// 현재 배열에 존재하면 참 없으면 거짓?
-/// 아직은 잘 모르겠다
 /// 
 /// 
 /// 그리고 블럭들이 존재해야함
@@ -1118,10 +1128,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 
                 int a = ((currentPiece.rot + 3) % 4); /// 0 ~ 3 의 enum 존재
                 Rotation nextRot = (Rotation)a;
-                currentPiece.rot = nextRot;
+                if (CollisionDetectAS(nextRot)) {
+                    currentPiece.rot = nextRot;
+                    LoadCurrentPiece();
+                    InvalidateRect(hWnd, NULL, FALSE);
+                }
 
-                LoadCurrentPiece();
-                InvalidateRect(hWnd, NULL, FALSE);
             }
             break;
             case 'S':
@@ -1130,14 +1142,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 /// 마찬가지로 CollisionDetectAS 에서
                 /// S 방향으로 블럭 돌리는게 가능하다면 돌리고
                 /// 안된다면 안돌린다
-                WPARAM key = wParam;
                 
                 int a = ((currentPiece.rot + 1) % 4);
                 Rotation nextRot = (Rotation)a;
-                currentPiece.rot = nextRot;
-                LoadCurrentPiece();
-                InvalidateRect(hWnd, NULL, FALSE);
-             
+                if (CollisionDetectAS(nextRot)) {
+                    currentPiece.rot = nextRot;
+                    LoadCurrentPiece();
+                    InvalidateRect(hWnd, NULL, FALSE);
+                }
+                
             }
             break;
             case 'D':
@@ -1158,18 +1171,22 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                     /// currentPiece 를 saveBlock 에 저장시키고 바로 새로운 블럭을 내려보낸다
 
                     /// saveBlock 에 currentPiece 를 저장시키고
-                    saveBlock = currentPiece;
-                    /// 아래의 초기화 과정을 해야할지 모르겠음
-                    /// 어차피 SpawnBlock 하면 덮어쓰이는거 아닌가?
-
+                    saveBlock.blockX = currentPiece.blockX;
+                    saveBlock.blockY = currentPiece.blockY;
+                    saveBlock.r = currentPiece.r;
+                    saveBlock.g = currentPiece.g;
+                    saveBlock.b = currentPiece.b;
+                    saveBlock.type = currentPiece.type;
+                    saveBlock.rot = ROT_0;
+                    
                     /// currentPiece 를 초기화 시켜야함
                     currentPiece.blockX = NULL;
                     currentPiece.blockY = NULL;
-                    currentPiece.rot = (Rotation)NULL;
-                    currentPiece.type = (TetrominiType)NULL;
                     currentPiece.r = NULL;
                     currentPiece.g = NULL;
                     currentPiece.b = NULL;
+                    currentPiece.type = (TetrominiType)NULL;
+                    currentPiece.rot = ROT_0;
                     hasSaveBlock = TRUE;
                     /// 초기화 해서 currentPiece 를 없애버렸으니 바로 새로운 블럭을 생성시킨다
                     SpawnBlock();
@@ -1186,6 +1203,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                     copyData = saveBlock;
                     saveBlock = currentPiece;
                     currentPiece = copyData;
+                    LoadCurrentPiece();
                 }
                 /// TODO:: 수정해야 할 것들
                 /// 벽에 끼이는 거
@@ -1196,6 +1214,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             break;
             case 'F':
             {
+                /// 현재 저장되어있던 블럭을 가져오는 과정에서 문제가 있음
+                /// 저장된 블럭을 가져오면
+                /// 가져오고 아무 상호작용 하지 않았을 때
+                /// 현재 블럭에 저장된 블럭의 색상만 입혀지고,
+                /// 상호작용을 하면
+                /// 저장된 블럭이 완전히 불러와짐
+                /// 
                 /// F 키를 누르면 현재 저장되어있는 블럭을 꺼내쓸거임
                 /// 내려오고 있는 currentBlock 은 없애버리고
                 /// saveBlock 을 꺼내온다
@@ -1213,6 +1238,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                     currentPiece.blockY = 0;
                     /// 현재 저장된 블럭을 불러와서 사용 했으니
                     /// 저장된 블럭이 없다는것을 알려줘야함
+                    LoadCurrentPiece();
                     hasSaveBlock = FALSE;
                 }
             }
@@ -1276,6 +1302,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             /// 만약 초기 속도랑 현재 속도랑 다르다면
             /// 그 때 타이머를 죽이고 새로 만들어야함
             /// 이미 second 가 있으니까
+            /// 1000점 쌓일 때 마다 속도가 점점 빨라지도록 설계
             if (currentScore >= nextSpeedUpScore)
             {
                 /// 속도 증가
@@ -1290,7 +1317,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 KillTimer(hWnd, 1);
                 SetTimer(hWnd, 1, second, NULL);
 
-                // 다음 목표 점수 갱신
+                /// 다음 목표 점수 갱신
                 nextSpeedUpScore += 1000;
             }
             /// 아래로 1칸 내려가는게 성공했을 시
