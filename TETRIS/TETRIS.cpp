@@ -270,6 +270,12 @@ struct Piece {
 /// 현재 떨어지고 있는 블럭의 정보를 담은 구조체
 Piece currentPiece;
 
+/// 다음에 생성될 블럭의 정보를 담은 구조체
+Piece nextPiece;
+/// nextPiece가 준비 되었는지 확인하는 플래그 변수
+/// 처음 시작하자마자는 없음
+BOOL hasNextPiece = FALSE;
+
 /// 현재 Piece 구조체 사용 안하고있음
 /// 색상도 넣고 사용하려면 구조체 안에 여러 정보들이 있어야함
 /// 
@@ -285,6 +291,9 @@ struct Cell {
 };
 
 Cell g_board[BOARD_H][BOARD_W];
+
+/// SpawnBlock 할 때 값을 할당해줄거임
+int currentBlock[4][4];   /// 현재 조작중인 블럭 4 x 4 모양
 
 /// 현재 점수
 int currentScore;
@@ -401,11 +410,6 @@ void DrawGameBoard(HWND hWnd, HDC hdc) {
 }
 
 
-/// 현재 내가 조작하고 있는 블럭 종류
-/// SpawnBlock 할 때 값을 할당해줄거임
-int currentBlock[4][4];   /// 현재 조작중인 블럭 4 x 4 크기
-
-
 /// 블럭이 내려와야함
 /// 근데 이미 그려진 영역 안에서만 블럭이 내려와야하고 
 /// 한번 내려올 때는 30px 씩 내려옴
@@ -496,6 +500,29 @@ void DrawNextBlockArea(HDC hdc) {
     WCHAR buf[16] = { 0, };
     wsprintfW(buf, L"다음 블럭");
     TextOut(hdc, left + 56, top - 7, buf, lstrlenW(buf));
+
+    /// nextPiece 그리기
+    HBRUSH myBrush = CreateSolidBrush(RGB(
+        nextPiece.r, nextPiece.g, nextPiece.b
+    ));
+    HBRUSH osBrush = (HBRUSH)SelectObject(hdc, myBrush);
+
+    /// 영역 안쪽에 여유를 주고 그리기
+    int paddingX = left + 30;
+    int paddingY = top + 30;
+
+    for (int y = 0; y < 4; y++) {
+        for (int x = 0; x < 4; x++) {
+            if (TETROMINO[nextPiece.type][nextPiece.rot][y][x] == 1) {
+                int px = paddingX + x * BLOCK;
+                int py = paddingY + y * BLOCK;
+                Rectangle(hdc, px, py, px + BLOCK, py + BLOCK);
+            }
+        }
+    }
+
+    SelectObject(hdc, osBrush);
+    DeleteObject(myBrush);
 }
 
 /// 저장을 하기 위해서는 Piece 타입의 전역변수로 선언해두고
@@ -568,10 +595,12 @@ void DrawSaveBlockArea(HWND hWnd) {
             }
         }
     }
+
+    SelectObject(hdc, osBrush);
+    DeleteObject(myBrush);
     /// 위에서 블럭을 저장했으니 TRUE 로 바꿔서 추가적으로 저장하지 못하게 해야함
     hasSaveBlock = TRUE;
 
-    ReleaseDC(hWnd, hdc);
 }
 
 /// 게임오버를 알리는 기능 구현
@@ -583,8 +612,33 @@ bool GameOver() {
     /// 하지만 지금 여기서 그렇게 하면 논리적 오류가 생긴다
     /// 게임 오버를 확인하기 위해서는 블럭을 먼저 생성해야하는데
     /// 블럭을 생성하기 전에 게임오버를 검사하기 때문에 논리적 오류가 생겨 정상작동을 안한다
-    /// 그렇다면 블럭을 SpawnBlock() 한다음에 fix 된 블럭과 닿는지 확인을 한다
-    return TRUE;
+    /// 그렇다면 블럭을 SpawnBlock() 한다음에 fix 된 블럭과 바로 닿는지 확인을 한다
+    /// 만약 스폰된 블럭이 한칸이라도 움직이면 gameover 가 아니고
+    /// 한칸이라도 움직이지 않고 바로 고정이 된다면 gameover 해야함
+    for (int y = 0; y < 4; y++) {
+        for (int x = 0; x < 4; x++) {
+            /// currentBlock[y][x] 가 0 이면 4 * 4 배열 안에서 빈 공간임
+            if (currentBlock[y][x] == 0) {
+                /// 빈공간은 필요 없으니까 건너뛰기
+                continue;
+            }
+            /// 빈 공간이 아닌 구역 = 실제로 Piece 가 존재하는 영역
+            /// 여기서 겹침 확인을 한다
+            
+            /// nx, ny 는 새로 스폰된 블럭이 게임 보드에서 어느 좌표에 위치해있는지 확인하는 변수
+            int nx = currentPiece.blockX + x;
+            int ny = currentPiece.blockY + y;
+
+
+            /// currentBlock은 게임보드에서 nx, ny 좌표에 존재함
+            /// 근데 nx, ny 좌표에 고정 블럭이 존재한다면 게임 오버
+            if (g_board[ny][nx].fix) {
+                return TRUE;
+            }
+        }
+    }
+    /// 아무 문제 없음, 게임 계속함
+    return FALSE;
 }
 
 
@@ -630,7 +684,16 @@ void FixBlock() {
 
 /// 다음에 나올 블럭을 미리 보여줌
 void ShowNextBlock() {
-
+    /// 다음 블럭을 보여주는 로직은
+    /// 게임 시작하자마자 랜덤 블럭을 currentBlock 에 넣어서 내려보내고
+    /// 그 다음부터는 nextBlock 이라는 변수를 하나 만들어 랜덤으로 블럭 할당
+    /// 내려가는 currentBlock 이 fix 되면
+    /// 그 때 nextBlock 을 currentBlock 에 저장시키고
+    /// 새로운 nextBlock 을 랜덤하게 맞아서 저장시키는 로직
+    /// 이렇게 하기 위해서는 전역변수로 nextBlock 이 필요함
+    /// nextBlock 에 값을 저장할 때는
+    /// currentBlock 이 fix 되었을 때 nextBlock 을 currentBlock 에 저장시키고
+    /// 그리고 nextBlock 에 새로운 값을 저장
 }
 
 /// 현재 속도를 보여주는 영역
@@ -803,18 +866,107 @@ void FullLine(HWND hWnd) {
 /// 블럭을 스폰시킴
 void SpawnBlock() {
     usedSaveBlockThisTurn = FALSE;
+    /// 현재 아래의 로직은 currentPiece 를 정의만함
+    /// 새로 추가해야할것
+    /// nextPiece 정의
+    
+    /// 아직 nextPiece 가 없다면
+    if (!hasNextPiece) {
+        /// nextPiece 에 테트로미노 타입 지정
+        nextPiece.type = (TetrominiType)(rand() % 7);
+        nextPiece.rot = ROT_0;
+
+        /// 그리고 색상 지정
+        switch (nextPiece.type) {
+        case I:
+            nextPiece.r = 0;
+            nextPiece.g = 255;
+            nextPiece.b = 255;
+            break;
+        case O:
+            nextPiece.r = 255;
+            nextPiece.g = 255;
+            nextPiece.b = 0;
+            break;
+        case T:
+            nextPiece.r = 128;
+            nextPiece.g = 0;
+            nextPiece.b = 128;
+            break;
+        case S:
+            nextPiece.r = 0;
+            nextPiece.g = 255;
+            nextPiece.b = 0;
+            break;
+        case Z:
+            nextPiece.r = 255;
+            nextPiece.g = 0;
+            nextPiece.b = 255;
+            break;
+        case J:
+            nextPiece.r = 0;
+            nextPiece.g = 0;
+            nextPiece.b = 255;
+            break;
+        case L:
+            nextPiece.r = 255;
+            nextPiece.g = 165;
+            nextPiece.b = 0;
+            break;
+        }
+        /// nextBlock 초기화 끝났으니까
+        /// hasNextPiece TRUE
+        hasNextPiece = TRUE;
+    }
+    /// 이제 currentBlock 에 nextPiece 를 저장함
+    /// 저장하는 이유는 nextPiece 가 다음 턴에 출력되게 하기 위해
+    currentPiece = nextPiece;
+    /// 초기 위치를 가지고 있는 멤버는 blockX, blockY
     /// 초기 블럭의 스폰 위치는 y : 70px, x : 220px 또는 250px
-    /// 랜덤함수를 이용해서 0~6 사이의 값을 하나 받음
-    /// 그 값에 해당하는 테트로미노를 하나 생성함
-    /// 근데 그걸 어케하냐?
-    /// 우선 rand 함수로 0~6 중에 하나 고름
-    currentPiece.type = (TetrominiType)(rand() % 7);  /// 0~6 사이 값 나옴, 스폰시킬 블럭의 타입이 정해짐
-    currentPiece.rot = ROT_0;        /// 회전 기본값
-    /// 그리고 블럭의 초기 위치도 정해줘야함
-    /// 초기 위치를 가지고 있는 변수는 blockX, blockY
     currentPiece.blockX = BOARD_W / 2 - 2;
     currentPiece.blockY = 0;
-    
+    /// 그리고 또 다음 턴을 위해 새로운 nextPiece 를 뽑아둔다
+    nextPiece.type = (TetrominiType)(rand() % 7);
+    nextPiece.rot = ROT_0;
+    /// 그리고 색상 지정
+    switch (nextPiece.type) {
+    case I:
+        nextPiece.r = 0;
+        nextPiece.g = 255;
+        nextPiece.b = 255;
+        break;
+    case O:
+        nextPiece.r = 255;
+        nextPiece.g = 255;
+        nextPiece.b = 0;
+        break;
+    case T:
+        nextPiece.r = 128;
+        nextPiece.g = 0;
+        nextPiece.b = 128;
+        break;
+    case S:
+        nextPiece.r = 0;
+        nextPiece.g = 255;
+        nextPiece.b = 0;
+        break;
+    case Z:
+        nextPiece.r = 255;
+        nextPiece.g = 0;
+        nextPiece.b = 255;
+        break;
+    case J:
+        nextPiece.r = 0;
+        nextPiece.g = 0;
+        nextPiece.b = 255;
+        break;
+    case L:
+        nextPiece.r = 255;
+        nextPiece.g = 165;
+        nextPiece.b = 0;
+        break;
+    }
+
     /// 그리고 currentPiece 의 색상도 미리 정해줘야함
     switch (currentPiece.type) {
     case I:
@@ -1089,6 +1241,9 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 ///  - 키보드 F : 저장한 블럭 꺼내쓰기
 ///  - 키보드 D : 블럭 저장하기
 ///  - 키보드 esc : 일시정지 + 메뉴 노출
+/// 
+/// 
+/// TODO::게임 점수 저장 및 게임 다시하기 만들어야함
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     switch (message)
@@ -1205,10 +1360,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                     currentPiece = copyData;
                     LoadCurrentPiece();
                 }
-                /// TODO:: 수정해야 할 것들
-                /// 벽에 끼이는 거
-                /// 저장 한 블럭 불러 올 때 색상 바뀌고
-                /// 상호작용 하기 전 까지는 블럭 색상만 반영이 된다
                 
             }
             break;
@@ -1309,9 +1460,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 second -= 100;
                 
                 if (second < 100) {
-                    /// 속도가 0.1 초 이하로 내려가면 
-                    /// 10 씩 줄이기
-                    second -= 10;
+                    second = 100;   // 최소 100ms 까지만 줄이기
                 }
                 /// 타이머를 죽이고 다시 생성
                 KillTimer(hWnd, 1);
@@ -1333,6 +1482,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 FullLine(hWnd);
                 /// 새로운 블럭을 생성
                 SpawnBlock();
+
+                /// 여기서 게임 오버 검사
+                /// 게임 오버하면 타이머를 멈추고 메시지 박스를 띄운다
+                if (GameOver()) {
+                    KillTimer(hWnd, 1);
+                    WCHAR showScore[32] = { 0, };
+                    wsprintf(showScore, L"점수 : %d", currentScore);
+                    MessageBox(hWnd, showScore, L"게임 오버", MB_OK);
+                }
             }
             InvalidateRect(hWnd, NULL, FALSE);
         }
