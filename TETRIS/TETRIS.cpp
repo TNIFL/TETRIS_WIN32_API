@@ -226,6 +226,10 @@ static const Shape TETROMINO[7][4] = {
     },
 };
 
+/// 게임 일시정지
+/// esc 누르면 게임 일시정지
+/// 한번더 누르면 재개
+BOOL isPaused;
 
 /// 테트로미노 구조체
 struct Piece {
@@ -1001,13 +1005,14 @@ void DrawKeyGuide(HDC hdc)
     int left = 30 + SCORE_ORIGIN_X + BLOCK_SIZE * BOARD_W;
     int top = SCORE_ORIGIN_Y + 60 + 180 + 30 + 180 + 10; /// 저장영역 아래에서 10px 띄움
 
-    WCHAR guide1[32], guide2[32], guide3[32], guide4[32], guide5[32], guide6[32];
+    WCHAR guide1[32], guide2[32], guide3[32], guide4[32], guide5[32], guide6[32], guide7[32];
     wsprintf(guide1, L"← / → : 좌우 이동");
     wsprintf(guide2, L"↓ : 소프트 드롭");
     wsprintf(guide3, L"↑ : 하드 드롭");
     wsprintf(guide4, L"A : 반시계 회전");
     wsprintf(guide5, L"S : 시계 회전");
     wsprintf(guide6, L"D 블럭 저장, F 블럭 불러오기");
+    wsprintf(guide7, L"ESC 게임 일시정지, 게임 재개");
 
     TextOut(hdc, left, top, guide1, lstrlen(guide1));
     TextOut(hdc, left, top + 20, guide2, lstrlen(guide2));
@@ -1015,6 +1020,8 @@ void DrawKeyGuide(HDC hdc)
     TextOut(hdc, left, top + 60, guide4, lstrlen(guide4));
     TextOut(hdc, left, top + 80, guide5, lstrlen(guide5));
     TextOut(hdc, left, top + 100, guide6, lstrlen(guide6));
+    TextOut(hdc, left, top + 120, guide7, lstrlen(guide7));
+
 }
 
 
@@ -1222,8 +1229,6 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 ///  - 키보드 D : 블럭 저장하기
 ///  - 키보드 esc : 일시정지 + 메뉴 노출
 /// 
-/// 
-/// TODO::게임 점수 저장 및 게임 다시하기 만들어야함
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     switch (message)
@@ -1237,7 +1242,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             /// ROT는 0 90 180 270 순으로
             ///       0  1   2   3  이 존재
             ///
-            /// TODO:: 추후에 블럭을 빠르게 돌리면 끼임이나 덮어쓰는 현상을 고쳐야함 버그임
             
             /// 'A'와 'S' KEYDOWN 이 왔을 때
             /// CollisionDetectAS() 함수가 호출되어야한다
@@ -1396,6 +1400,22 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 InvalidateRect(hWnd, NULL, FALSE);
             }
             break;
+            case VK_ESCAPE:
+            {
+                /// TODO:: 게임 일시정지, 재개 만들어야함, 게임 화면 전체를 살짝 회색으로 바꾸고
+                ///        게임 보드 한가운데에 "일시정지" 를 그릴거임
+                if (!isPaused) {
+                    /// isPaused 가 FALSE 라면 게임을 멈춰주고 TRUE 로 바꿔줌
+                    KillTimer(hWnd, 1);
+                    isPaused = TRUE;
+                }
+                else if (isPaused) {
+                    /// isPaused 가 TRUE 라면 게임을 재개하고 FALSE 로 바꿔줌
+                    SetTimer(hWnd, 1, second, NULL);
+                    isPaused = FALSE;
+                }
+            }
+            break;
         }
     }
     break;
@@ -1416,7 +1436,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         
     }
     break;
-    case WM_TIMER:  /// TODO:: 타이머를 사용해서 특정 점수마다 블럭 내려오는 속도를 빠르게 만들어야함
+    case WM_TIMER:
     {
         /// 타이머에서 블럭이 아래 벽에 닿았을 때 멈춰야함
         /// FixBlock(), SpawnBlock() 해줘야함
