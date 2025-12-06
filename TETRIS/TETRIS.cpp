@@ -254,7 +254,7 @@ BOOL hasNextPiece = FALSE;
 /// 
 struct Cell {
     bool isWall;        /// 벽이면 true
-    bool fix;           /// 고정상태면 true
+    bool isFixed;           /// 고정상태면 true
     int r, g, b;        /// 고정된 블럭의 색
 };
 
@@ -273,9 +273,15 @@ int nextSpeedUpScore = 1000;
 /// 1초 라는것은 블럭이 생성될 때 까지 걸리는 시간 + 블럭이 내려오는데 걸리는 시간을 뜻한다
 int second = 1000;
 
-/// 현재 턴에서 저장하기를 사용했는지 알기위한 BOOL 타입의 전역변수
-/// 이 변수는 새로운 블럭이 스폰 될 때 마다 FALSE 로 초기화 시켜야함
-BOOL usedSaveBlockThisTurn;
+/// 한 턴에 저장 또는 불러오기를 둘 중 하나만 사용 가능하게 만드는 플래그 변수
+/// 이 변수는 게임 시작할때 FALSE 로 초기화 되고
+/// D, F 를 눌렀을 때 TRUE
+/// SpawnBlock 호출될 때 FALSE 로 바꾸면
+/// D 를 눌렀을 때 마지막에 SpawnBlock을 호출하기 때문에
+/// 무한 저장 불러오기 가능해짐
+/// 그럼 어디서 FALSE 로 또 바꿔야 하냐
+/// FixBlock 이 불러와지는 시점에서 FALSE 로 바꿔줌
+BOOL hasUsedSaveOrLoad;
 
 /// g_board 에도 색상을 넣기 위해서는 색상 정보를 저장할 변수들이 필요함
 /// 그렇다면 차라리 g_board도 구조체로 만들어버림
@@ -332,15 +338,15 @@ void InitBoard() {
 /// 프로그래머가 WM_PAINT를 요청하는 API
 ///  - InvalidateRect(hWnd, NULL, TRUE); -> 현재 화면을 다시 그려주세요
 /// 모든 화면 그리기는 항상 연산이 끝나고 나서 움직인다
-const int BLOCK = 25;       /// 한개의 블럭은 30의 크기를 가짐
+const int BLOCK_SIZE = 25;       /// 한개의 블럭은 30의 크기를 가짐
 const int ORIGIN_X = 70;    /// 이 게임 보드의 시작 위치는 70, 70(왼쪽 위 기준)
 const int ORIGIN_Y = 70;
 void DrawGameBoard(HWND hWnd, HDC hdc) {
     for (int y = 0; y < BOARD_H; y++) {
         for (int x = 0; x < BOARD_W; x++) {
 
-            int px = ORIGIN_X + x * BLOCK;  /// 보드의 x 번째 칸이 화면에서 몇 픽셀에 있어야하는지
-            int py = ORIGIN_Y + y * BLOCK;  /// 보드의 y 번째 칸이 화면에서 몇 필셀에 있어야하는지
+            int px = ORIGIN_X + x * BLOCK_SIZE;  /// 보드의 x 번째 칸이 화면에서 몇 픽셀에 있어야하는지
+            int py = ORIGIN_Y + y * BLOCK_SIZE;  /// 보드의 y 번째 칸이 화면에서 몇 필셀에 있어야하는지
             /// cell 을 사용하지 않고
             /// g_board[y][x].isWall 을 사용해서
             /// 만약 TRUE 라면 벽 색을 회색으로 입히고
@@ -351,27 +357,27 @@ void DrawGameBoard(HWND hWnd, HDC hdc) {
                 /// os 가 들고있는 브러쉬를 myBrush 로 바꿔버림
                 HBRUSH osBrush = (HBRUSH)SelectObject(hdc, myBrush);
 
-                Rectangle(hdc, px, py, px + BLOCK, py + BLOCK);
+                Rectangle(hdc, px, py, px + BLOCK_SIZE, py + BLOCK_SIZE);
 
                 /// 다 쓴 브러쉬를 교환하고
                 SelectObject(hdc, osBrush);
                 /// 정리
                 DeleteObject(myBrush);
             }
-            else if (g_board[y][x].fix) {
+            else if (g_board[y][x].isFixed) {
                 /// 고정된 블럭의 rgb 값으로 g_board[y][x] 좌표를 채운다
                 HBRUSH myBrush = CreateSolidBrush(
                     RGB(g_board[y][x].r,
                         g_board[y][x].g,
                         g_board[y][x].b));
                 HBRUSH osBrush = (HBRUSH)SelectObject(hdc, myBrush);
-                Rectangle(hdc, px, py, px + BLOCK, py + BLOCK);
+                Rectangle(hdc, px, py, px + BLOCK_SIZE, py + BLOCK_SIZE);
                 SelectObject(hdc, osBrush);
                 DeleteObject(myBrush);
             }
             /// 빈 칸 그리기(흰색)
             else {
-                Rectangle(hdc, px, py, px + BLOCK, py + BLOCK);
+                Rectangle(hdc, px, py, px + BLOCK_SIZE, py + BLOCK_SIZE);
             }
         }
     }
@@ -409,12 +415,12 @@ const int SCORE_ORIGIN_X = 70;
 const int SCORE_ORIGIN_Y = 10;
 
 void DrawScoreBoard(HWND hWnd, HDC hdc) {
-    Rectangle(hdc, SCORE_ORIGIN_X, SCORE_ORIGIN_Y, SCORE_ORIGIN_X + (BLOCK * BOARD_W), SCORE_ORIGIN_Y + 50);
+    Rectangle(hdc, SCORE_ORIGIN_X, SCORE_ORIGIN_Y, SCORE_ORIGIN_X + (BLOCK_SIZE * BOARD_W), SCORE_ORIGIN_Y + 50);
     /// Rect 안에 현재 점수를 넣고 점수가 들어올 때 마다 계속 갱신해야함
     /// Rect 안에 현재 점수를 출력시킴
     WCHAR buf[16] = { 0, };
     wsprintfW(buf, L"현재 점수");
-    TextOut(hdc, (SCORE_ORIGIN_X + (BLOCK * BOARD_W)) / 2, SCORE_ORIGIN_Y - 7, buf, lstrlenW(buf));
+    TextOut(hdc, (SCORE_ORIGIN_X + (BLOCK_SIZE * BOARD_W)) / 2, SCORE_ORIGIN_Y - 7, buf, lstrlenW(buf));
 
     memset(buf, 0x00, 0);
 
@@ -422,7 +428,7 @@ void DrawScoreBoard(HWND hWnd, HDC hdc) {
     /// 원래 점수에 계속 + 
 
     wsprintfW(buf, L"%d", currentScore);
-    TextOut(hdc, (SCORE_ORIGIN_X + (BLOCK * BOARD_W)) / 2 + 30, SCORE_ORIGIN_Y + 15, buf, lstrlenW(buf));
+    TextOut(hdc, (SCORE_ORIGIN_X + (BLOCK_SIZE * BOARD_W)) / 2 + 30, SCORE_ORIGIN_Y + 15, buf, lstrlenW(buf));
 
 }
 
@@ -430,7 +436,7 @@ void DrawScoreBoard(HWND hWnd, HDC hdc) {
 void DrawHighScoreBoard(HDC hdc) {
     /// 최고 점수 영역은
     /// 다음 블럭 영역의 바로 아래에 30 px 떨어져서 존재한다
-    int left = 30 + SCORE_ORIGIN_X + BLOCK * BOARD_W;
+    int left = 30 + SCORE_ORIGIN_X + BLOCK_SIZE * BOARD_W;
     int top = SCORE_ORIGIN_Y + 60 + 180 + 30;
     int right = left + 180;
     int bottom = top + 120;
@@ -451,7 +457,7 @@ void DrawNextBlockArea(HDC hdc) {
     /// bottom : top + 180 -> 테트로미노 중 가장 긴 블럭이 I 인데 이걸 세우면
     ///          총 120 의 세로 길이를 가지게 된다
     ///          여유 공간을 고려하여 위 아래 여유롭게 30 30 공간을 주면 좋을듯
-    int left = 30 + SCORE_ORIGIN_X + BLOCK * BOARD_W;
+    int left = 30 + SCORE_ORIGIN_X + BLOCK_SIZE * BOARD_W;
     int top = SCORE_ORIGIN_Y + 60;
     int right = left + 180;
     int bottom = top + 160;
@@ -482,9 +488,9 @@ void DrawNextBlockArea(HDC hdc) {
     for (int y = 0; y < 4; y++) {
         for (int x = 0; x < 4; x++) {
             if (TETROMINO[nextPiece.type][nextPiece.rot][y][x] == 1) {
-                int px = paddingX + x * BLOCK;
-                int py = paddingY + y * BLOCK;
-                Rectangle(hdc, px, py, px + BLOCK, py + BLOCK);
+                int px = paddingX + x * BLOCK_SIZE;
+                int py = paddingY + y * BLOCK_SIZE;
+                Rectangle(hdc, px, py, px + BLOCK_SIZE, py + BLOCK_SIZE);
             }
         }
     }
@@ -523,7 +529,7 @@ void LoadSavePiece() {
 /// 그리고 저장된 블럭이 이미 있다면 현재 블럭이랑 스왑하는 형식으로 해야할듯
 void DrawSaveBlockArea(HWND hWnd) {
     HDC hdc = GetDC(hWnd);
-    int left = 30 + SCORE_ORIGIN_X + BLOCK * BOARD_W;
+    int left = 30 + SCORE_ORIGIN_X + BLOCK_SIZE * BOARD_W;
     int top = SCORE_ORIGIN_Y + 60 + 180 + 30;
     int right = left + 180;
     int bottom = top + 180;
@@ -556,10 +562,10 @@ void DrawSaveBlockArea(HWND hWnd) {
                 /// 화면에 출력하기 위한 x, y 좌표
                 /// fx = fix x => ORIGIN_X + BLOCK * BOARD_W + 30 + 90
                 /// fy = fix y => ORIGIN_Y + 50 + 400
-                int fx = left + 30 + x * BLOCK;
-                int fy = top + 30 + y * BLOCK;
+                int fx = left + 30 + x * BLOCK_SIZE;
+                int fy = top + 30 + y * BLOCK_SIZE;
 
-                Rectangle(hdc, fx, fy, fx + BLOCK, fy + BLOCK);
+                Rectangle(hdc, fx, fy, fx + BLOCK_SIZE, fy + BLOCK_SIZE);
             }
         }
     }
@@ -575,7 +581,7 @@ void DrawSaveBlockArea(HWND hWnd) {
 /// 게임 오버의 조건은 블럭이 생성되는 영역 까지 fix 된 블럭들이 쌓여 닿았을 시
 /// 단순히 새로 스폰된 블럭이 fix 블럭과 닿는다면 게임오버시킨다
 /// bool 타입으로 WM_TIMER 의 SpawnBlock() 위에서 GameOver 인지 검사한다
-bool GameOver() {
+bool isGameOver() {
     /// 게임 오버 검사는 새로 생성되는 블럭과 닿는다면 게임 오버
     /// 하지만 지금 여기서 그렇게 하면 논리적 오류가 생긴다
     /// 게임 오버를 확인하기 위해서는 블럭을 먼저 생성해야하는데
@@ -600,7 +606,7 @@ bool GameOver() {
 
             /// currentBlock은 게임보드에서 nx, ny 좌표에 존재함
             /// 근데 nx, ny 좌표에 고정 블럭이 존재한다면 게임 오버
-            if (g_board[ny][nx].fix) {
+            if (g_board[ny][nx].isFixed) {
                 return TRUE;
             }
         }
@@ -634,7 +640,7 @@ void FixBlock() {
                 int fy = currentPiece.blockY + y;    /// 블럭을 고정하기 위해 얻은 좌표
                 /// g_board[fy][fx] 멤버의 값을 설정해줘야함
                 g_board[fy][fx].isWall = FALSE;   /// 벽이 아님
-                g_board[fy][fx].fix = TRUE;       /// 고정 시키기
+                g_board[fy][fx].isFixed = TRUE;       /// 고정 시키기
                 g_board[fy][fx].r = currentPiece.r;
                 g_board[fy][fx].g = currentPiece.g;
                 g_board[fy][fx].b = currentPiece.b;
@@ -642,6 +648,7 @@ void FixBlock() {
             }
         }
     }
+    hasUsedSaveOrLoad = FALSE;
 }   
 
 /// 현재 속도를 보여주는 영역
@@ -678,7 +685,7 @@ void LoadCurrentPiece() {
 
 /// 여기서 A, S 에 대한 충돌감지 코드 작성
 /// A S 중 어떤걸 파라미터로 가져오는지 알아야함
-bool CollisionDetectAS(Rotation nextRot) {
+bool canMoveCurrentBlockAS(Rotation nextRot) {
     /// currnetBlock 의 y, x 좌표를 이용해서
     /// 키보드 A, S 가 눌렸을 때 돌아가는 과정에서
     /// 벽이나 블럭이 존재하는지 확인 한 후에
@@ -705,7 +712,7 @@ bool CollisionDetectAS(Rotation nextRot) {
             }
 
             /// 벽이나 고정 블럭이랑 겹치면 회전 불가
-            if (g_board[ny][nx].isWall || g_board[ny][nx].fix) {
+            if (g_board[ny][nx].isWall || g_board[ny][nx].isFixed) {
                 return FALSE;
             }
 
@@ -721,7 +728,7 @@ bool CollisionDetectAS(Rotation nextRot) {
 
 /// 벽에 닿았을 때 넘어가지 않게 해줌
 /// 여기서 내려오는 블럭이 게임 보드에 끼이지 않게 수정해야함
-BOOL CollisionDetection(int dx, int dy) {
+BOOL canMoveCurrentBlock(int dx, int dy) {
     /// dx, dy 는 움직일 양을 뜻함
     /// 왼쪽 벽, 오른쪽 벽, 아래 벽 에 닿았을 때 넘어가지 않게 해줌
     /// 현재 테트로미노의 인덱스 기준으로 닿음을 확인함
@@ -744,7 +751,7 @@ BOOL CollisionDetection(int dx, int dy) {
             /// g_board[ny][nx] 가 1 이면 벽임
             /// 이동불가
             /// 그리고 고정된 블럭에도 못감
-            if (g_board[ny][nx].isWall || g_board[ny][nx].fix) {
+            if (g_board[ny][nx].isWall || g_board[ny][nx].isFixed) {
                 return FALSE;
             }
         }
@@ -786,7 +793,7 @@ void FullLine(HWND hWnd) {
         /// isFull 은 해당 y 배열이 가득 찼는지 확인하기 위해 존재하는 변수
         BOOL isFull = TRUE;
         for (int x = 1; x < BOARD_W - 1; x++) {
-            if (g_board[y][x].fix == FALSE) {
+            if (g_board[y][x].isFixed == FALSE) {
                 isFull = FALSE;
                 break;
             }
@@ -815,7 +822,6 @@ void FullLine(HWND hWnd) {
 
 /// 블럭을 스폰시킴
 void SpawnBlock() {
-    usedSaveBlockThisTurn = FALSE;
     /// 현재 아래의 로직은 currentPiece 를 정의만함
     /// 새로 추가해야할것
     /// nextPiece 정의
@@ -978,10 +984,10 @@ void DrawCurrentBlock(HWND hWnd, HDC hdc) {
         for (int x = 0; x < 4; x++) {
             if (currentBlock[y][x] == 1) {  /// 1이면 해당 영역에 블럭이 존재
                 /// blockX, blockY : currentBlock의 위치를 보드 기준으로 나타내는 좌표
-                int px = ORIGIN_X + (currentPiece.blockX + x) * BLOCK;
-                int py = ORIGIN_Y + (currentPiece.blockY + y) * BLOCK;
+                int px = ORIGIN_X + (currentPiece.blockX + x) * BLOCK_SIZE;
+                int py = ORIGIN_Y + (currentPiece.blockY + y) * BLOCK_SIZE;
                 /// 블럭 그리기
-                Rectangle(hdc, px, py, px + BLOCK, py + BLOCK);
+                Rectangle(hdc, px, py, px + BLOCK_SIZE, py + BLOCK_SIZE);
             }
         }
     }
@@ -992,7 +998,7 @@ void DrawCurrentBlock(HWND hWnd, HDC hdc) {
 /// 키 설명 표시 영역
 void DrawKeyGuide(HDC hdc)
 {
-    int left = 30 + SCORE_ORIGIN_X + BLOCK * BOARD_W;
+    int left = 30 + SCORE_ORIGIN_X + BLOCK_SIZE * BOARD_W;
     int top = SCORE_ORIGIN_Y + 60 + 180 + 30 + 180 + 10; /// 저장영역 아래에서 10px 띄움
 
     WCHAR guide1[32], guide2[32], guide3[32], guide4[32], guide5[32], guide6[32];
@@ -1257,7 +1263,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 
                 int a = ((currentPiece.rot + 3) % 4); /// 0 ~ 3 의 enum 존재
                 Rotation nextRot = (Rotation)a;
-                if (CollisionDetectAS(nextRot)) {
+                if (canMoveCurrentBlockAS(nextRot)) {
                     currentPiece.rot = nextRot;
                     LoadCurrentPiece();
                     InvalidateRect(hWnd, NULL, FALSE);
@@ -1274,7 +1280,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 
                 int a = ((currentPiece.rot + 1) % 4);
                 Rotation nextRot = (Rotation)a;
-                if (CollisionDetectAS(nextRot)) {
+                if (canMoveCurrentBlockAS(nextRot)) {
                     currentPiece.rot = nextRot;
                     LoadCurrentPiece();
                     InvalidateRect(hWnd, NULL, FALSE);
@@ -1284,10 +1290,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             break;
             case 'D':
             {
-                /// 만약 usedSaveBlockThisTurn 이 TRUE 라면
-                /// 이미 이번 턴에 블럭 저장을 했기 때문에
-                /// 더 이상 저장하지 못하게 break; 로 넘아가야함
-                if (usedSaveBlockThisTurn) {
+                /// 해당 턴에 D F 를 둘 중 하나라도 사용했으면 break
+                if (hasUsedSaveOrLoad) {
                     break;
                 }
                 /// 저장된 블럭이 없다면 현재 블럭을 저장시키고
@@ -1300,8 +1304,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                     /// currentPiece 를 saveBlock 에 저장시키고 바로 새로운 블럭을 내려보낸다
 
                     /// saveBlock 에 currentPiece 를 저장시키고
-                    saveBlock.blockX = currentPiece.blockX;
-                    saveBlock.blockY = currentPiece.blockY;
+                    /// 좌표를 저장하면 저장 당시의 좌표에 불러와짐
+                    ///saveBlock.blockX = currentPiece.blockX;
+                    ///saveBlock.blockY = currentPiece.blockY;
                     saveBlock.r = currentPiece.r;
                     saveBlock.g = currentPiece.g;
                     saveBlock.b = currentPiece.b;
@@ -1317,40 +1322,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                     currentPiece.type = (TetrominiType)NULL;
                     currentPiece.rot = ROT_0;
                     hasSaveBlock = TRUE;
+                    hasUsedSaveOrLoad = TRUE;
                     /// 초기화 해서 currentPiece 를 없애버렸으니 바로 새로운 블럭을 생성시킨다
                     SpawnBlock();
                 }
-                /// 이미 저장된 블럭이 있다면
-                /// 현재 블럭과 스왑해준다
-                /// 그리고 한개의 블럭이 내려오는 동안에는
-                /// 저장은 무조건 한번만 가능하게
-                /// 여러번 저장하게 된다면 끝도없이 저장할수있어서
-                /// 논리적으로 문제가 생긴다
-                else if (hasSaveBlock) {
-                    usedSaveBlockThisTurn = TRUE;
-                    Piece copyData;
-                    copyData = saveBlock;
-                    saveBlock = currentPiece;
-                    currentPiece = copyData;
-                    LoadCurrentPiece();
-                }
-                
             }
             break;
+            /// 저장된 블럭을 불러올 때
+            /// 현재 내려오고 있는 블럭은 그냥 삭제시켜버림 
             case 'F':
             {
-                /// 현재 저장되어있던 블럭을 가져오는 과정에서 문제가 있음
-                /// 저장된 블럭을 가져오면
-                /// 가져오고 아무 상호작용 하지 않았을 때
-                /// 현재 블럭에 저장된 블럭의 색상만 입혀지고,
-                /// 상호작용을 하면
-                /// 저장된 블럭이 완전히 불러와짐
-                /// 
-                /// F 키를 누르면 현재 저장되어있는 블럭을 꺼내쓸거임
-                /// 내려오고 있는 currentBlock 은 없애버리고
-                /// saveBlock 을 꺼내온다
-                /// 그리고 동시에 처음 위치에서 다시 내려오게 해야함
-                /// 저장된 블럭이 없는 경우는 아무것도 안한다
+                /// 해당 턴에 D F 를 둘 중 하나라도 사용했으면 break
+                if (hasUsedSaveOrLoad) {
+                    break;
+                }
                 if (!hasSaveBlock) {
                     break;
                 }
@@ -1364,7 +1349,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                     /// 현재 저장된 블럭을 불러와서 사용 했으니
                     /// 저장된 블럭이 없다는것을 알려줘야함
                     LoadCurrentPiece();
+                    /// 불러오기를 했으니까 저장된 블럭은 없음
+                    /// FALSE 로 바꿔줌으로써 D 진입 가능하게 바꿈
                     hasSaveBlock = FALSE;
+                    hasUsedSaveOrLoad = TRUE;
                 }
             }
             break;
@@ -1372,7 +1360,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             {
                 /// 만약 게임보드에서 -1 만큼 움직이는게 성공했을 시
                 /// blockX-- 해주고 다시 그림
-                if (CollisionDetection(-1, 0)) {
+                if (canMoveCurrentBlock(-1, 0)) {
                     currentPiece.blockX--;
                 }
                 InvalidateRect(hWnd, NULL, FALSE);
@@ -1382,7 +1370,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             {
                 /// 만약 게임보드에서 +1 만큼 움직이는게 성공했을 시
                 /// blockX++ 해주고 다시 그림
-                if (CollisionDetection(1, 0)) {
+                if (canMoveCurrentBlock(1, 0)) {
                     currentPiece.blockX++;
                 }
                 InvalidateRect(hWnd, NULL, FALSE);
@@ -1392,7 +1380,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             {
                 /// 만약 게임 보드에서 y 가 1만큼 증가하는게 성공했을 시
                 /// blockY++ 해주고 다시 그림
-                if (CollisionDetection(0, 1)) {
+                if (canMoveCurrentBlock(0, 1)) {
                     currentPiece.blockY++;
                 }
                 InvalidateRect(hWnd, NULL, FALSE);
@@ -1402,7 +1390,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             {
                 /// 하드드롭
                 /// fix 또는 isWall 이 나올 때 까지 반복문으로 CollisionDetection 호출
-                while (CollisionDetection(0, 1)) {
+                while (canMoveCurrentBlock(0, 1)) {
                     currentPiece.blockY++;
                 }
                 InvalidateRect(hWnd, NULL, FALSE);
@@ -1454,7 +1442,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 nextSpeedUpScore += 1000;
             }
             /// 아래로 1칸 내려가는게 성공했을 시
-            if (CollisionDetection(0, 1)) {
+            if (canMoveCurrentBlock(0, 1)) {
                 /// 아래로 내려버림
                 currentPiece.blockY++;
                 InvalidateRect(hWnd, NULL, FALSE);
@@ -1471,7 +1459,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
                 /// 여기서 게임 오버 검사
                 /// 게임 오버하면 타이머를 멈추고 메시지 박스를 띄운다
-                if (GameOver()) {
+                if (isGameOver()) {
                     KillTimer(hWnd, 1);
                     WCHAR showScore[32] = { 0, };
                     wsprintf(showScore, L"점수 : %d", currentScore);
@@ -1509,7 +1497,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             DrawHighScoreBoard(hdc);
             DrawCurrentBlock(hWnd, hdc);
             DrawSaveBlockArea(hWnd);
-            ShowCurrentSecond(hWnd);
+            ///ShowCurrentSecond(hWnd);
             DrawKeyGuide(hdc);
             EndPaint(hWnd, &ps);
         }
