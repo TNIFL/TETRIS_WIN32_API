@@ -3,12 +3,11 @@
 
 #include "framework.h"
 #include "TETRIS.h"
-
 #include <stdlib.h>
 #include <time.h>
 #include <array>
+
 #define MAX_LOADSTRING 100
-#define TETROMINO_COUNT 7       /// 테트로미노 갯수
 #define BOARD_W 12              /// 게임 보드 너비
 #define BOARD_H 27              /// 게임 보드 높이
 
@@ -36,7 +35,6 @@ enum Rotation {
 using Shape = std::array<std::array<BYTE, 4>, 4>;
 
 /// 게임 보드 배열 필요 - 게임 플레이 영역
-using GameBoard = std::array<std::array<BYTE, BOARD_W>, BOARD_H>;
 
 
 /// 각 테트로미노가 어떤 좌표를 가지는지 초기 설정
@@ -229,36 +227,6 @@ static const Shape TETROMINO[7][4] = {
 };
 
 
-static const GameBoard GB = {
-    {{1,0,0,0,0,0,0,0,0,0,0,1},
-     {1,0,0,0,0,0,0,0,0,0,0,1},
-     {1,0,0,0,0,0,0,0,0,0,0,1},
-     {1,0,0,0,0,0,0,0,0,0,0,1},
-     {1,0,0,0,0,0,0,0,0,0,0,1},
-     {1,0,0,0,0,0,0,0,0,0,0,1},
-     {1,0,0,0,0,0,0,0,0,0,0,1},
-     {1,0,0,0,0,0,0,0,0,0,0,1},
-     {1,0,0,0,0,0,0,0,0,0,0,1},
-     {1,0,0,0,0,0,0,0,0,0,0,1},
-     {1,0,0,0,0,0,0,0,0,0,0,1},
-     {1,0,0,0,0,0,0,0,0,0,0,1},
-     {1,0,0,0,0,0,0,0,0,0,0,1},
-     {1,0,0,0,0,0,0,0,0,0,0,1},
-     {1,0,0,0,0,0,0,0,0,0,0,1},
-     {1,0,0,0,0,0,0,0,0,0,0,1},
-     {1,0,0,0,0,0,0,0,0,0,0,1},
-     {1,0,0,0,0,0,0,0,0,0,0,1},
-     {1,0,0,0,0,0,0,0,0,0,0,1},
-     {1,0,0,0,0,0,0,0,0,0,0,1},
-     {1,0,0,0,0,0,0,0,0,0,0,1},
-     {1,0,0,0,0,0,0,0,0,0,0,1},
-     {1,0,0,0,0,0,0,0,0,0,0,1},
-     {1,0,0,0,0,0,0,0,0,0,0,1},
-     {1,0,0,0,0,0,0,0,0,0,0,1},
-     {1,0,0,0,0,0,0,0,0,0,0,1},
-     {1,1,1,1,1,1,1,1,1,1,1,1}}
-};
-
 /// 테트로미노 구조체
 struct Piece {
     TetrominiType type;   /// TETROMINO (0 ~ 6)
@@ -364,7 +332,7 @@ void InitBoard() {
 /// 프로그래머가 WM_PAINT를 요청하는 API
 ///  - InvalidateRect(hWnd, NULL, TRUE); -> 현재 화면을 다시 그려주세요
 /// 모든 화면 그리기는 항상 연산이 끝나고 나서 움직인다
-const int BLOCK = 30;       /// 한개의 블럭은 30의 크기를 가짐
+const int BLOCK = 25;       /// 한개의 블럭은 30의 크기를 가짐
 const int ORIGIN_X = 70;    /// 이 게임 보드의 시작 위치는 70, 70(왼쪽 위 기준)
 const int ORIGIN_Y = 70;
 void DrawGameBoard(HWND hWnd, HDC hdc) {
@@ -641,12 +609,6 @@ bool GameOver() {
     return FALSE;
 }
 
-
-/// 다음 레벨 알려주는 영역 그리기
-void DrawNextLevelArea() {
-
-}
-
 /// 내려온 블럭이 아래에 있던 벽이나 이미 설치되어있는 블럭에 닿았는지 검사
 /// 그리고 블럭 위치 고정시키기
 void FixBlock() {
@@ -681,20 +643,6 @@ void FixBlock() {
         }
     }
 }   
-
-/// 다음에 나올 블럭을 미리 보여줌
-void ShowNextBlock() {
-    /// 다음 블럭을 보여주는 로직은
-    /// 게임 시작하자마자 랜덤 블럭을 currentBlock 에 넣어서 내려보내고
-    /// 그 다음부터는 nextBlock 이라는 변수를 하나 만들어 랜덤으로 블럭 할당
-    /// 내려가는 currentBlock 이 fix 되면
-    /// 그 때 nextBlock 을 currentBlock 에 저장시키고
-    /// 새로운 nextBlock 을 랜덤하게 맞아서 저장시키는 로직
-    /// 이렇게 하기 위해서는 전역변수로 nextBlock 이 필요함
-    /// nextBlock 에 값을 저장할 때는
-    /// currentBlock 이 fix 되었을 때 nextBlock 을 currentBlock 에 저장시키고
-    /// 그리고 nextBlock 에 새로운 값을 저장
-}
 
 /// 현재 속도를 보여주는 영역
 void ShowCurrentSecond(HWND hWnd) {
@@ -803,6 +751,8 @@ BOOL CollisionDetection(int dx, int dy) {
     }
     return TRUE;
 }
+
+
 
 /// 해당 x 배열을 지우기 위한 함수
 /// y 층의 모든 배열을 지우기
@@ -1016,6 +966,7 @@ void SpawnBlock() {
 }
 
 
+
 /// 화면에 스폰시킨 블럭 그리기
 void DrawCurrentBlock(HWND hWnd, HDC hdc) {
     HBRUSH myBrush = CreateSolidBrush(RGB(
@@ -1037,6 +988,29 @@ void DrawCurrentBlock(HWND hWnd, HDC hdc) {
     SelectObject(hdc, osBrush);
     DeleteObject(myBrush);
 }
+
+/// 키 설명 표시 영역
+void DrawKeyGuide(HDC hdc)
+{
+    int left = 30 + SCORE_ORIGIN_X + BLOCK * BOARD_W;
+    int top = SCORE_ORIGIN_Y + 60 + 180 + 30 + 180 + 10; /// 저장영역 아래에서 10px 띄움
+
+    WCHAR guide1[32], guide2[32], guide3[32], guide4[32], guide5[32], guide6[32];
+    wsprintf(guide1, L"← / → : 좌우 이동");
+    wsprintf(guide2, L"↓ : 소프트 드롭");
+    wsprintf(guide3, L"↑ : 하드 드롭");
+    wsprintf(guide4, L"A : 반시계 회전");
+    wsprintf(guide5, L"S : 시계 회전");
+    wsprintf(guide6, L"D 블럭 저장, F 블럭 불러오기");
+
+    TextOut(hdc, left, top, guide1, lstrlen(guide1));
+    TextOut(hdc, left, top + 20, guide2, lstrlen(guide2));
+    TextOut(hdc, left, top + 40, guide3, lstrlen(guide3));
+    TextOut(hdc, left, top + 60, guide4, lstrlen(guide4));
+    TextOut(hdc, left, top + 80, guide5, lstrlen(guide5));
+    TextOut(hdc, left, top + 100, guide6, lstrlen(guide6));
+}
+
 
 /*
     선 속성 변경
@@ -1424,6 +1398,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 InvalidateRect(hWnd, NULL, FALSE);
             }
             break;
+            case VK_UP:
+            {
+                /// 하드드롭
+                /// fix 또는 isWall 이 나올 때 까지 반복문으로 CollisionDetection 호출
+                while (CollisionDetection(0, 1)) {
+                    currentPiece.blockY++;
+                }
+                InvalidateRect(hWnd, NULL, FALSE);
+            }
+            break;
         }
     }
     break;
@@ -1473,6 +1457,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             if (CollisionDetection(0, 1)) {
                 /// 아래로 내려버림
                 currentPiece.blockY++;
+                InvalidateRect(hWnd, NULL, FALSE);
             }
             /// 아래로 1칸 내려가는게 실패했을 시
             else {
@@ -1482,6 +1467,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 FullLine(hWnd);
                 /// 새로운 블럭을 생성
                 SpawnBlock();
+                InvalidateRect(hWnd, NULL, FALSE);
 
                 /// 여기서 게임 오버 검사
                 /// 게임 오버하면 타이머를 멈추고 메시지 박스를 띄운다
@@ -1492,7 +1478,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                     MessageBox(hWnd, showScore, L"게임 오버", MB_OK);
                 }
             }
-            InvalidateRect(hWnd, NULL, FALSE);
         }
     }
     break;
@@ -1525,6 +1510,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             DrawCurrentBlock(hWnd, hdc);
             DrawSaveBlockArea(hWnd);
             ShowCurrentSecond(hWnd);
+            DrawKeyGuide(hdc);
             EndPaint(hWnd, &ps);
         }
         break;
