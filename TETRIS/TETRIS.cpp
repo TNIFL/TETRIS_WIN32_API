@@ -248,17 +248,12 @@ Piece nextPiece;
 /// 처음 시작하자마자는 없음
 BOOL hasNextPiece = FALSE;
 
-/// 현재 Piece 구조체 사용 안하고있음
-/// 색상도 넣고 사용하려면 구조체 안에 여러 정보들이 있어야함
-/// 
 
 /// !!! 게임 보드 영역의 좌표는 무조건 왼쪽 위 부터 오른쪽 아래로 갈 수록 커짐
-/// g_board[BOARD_H][BOARD_W] 로 정의 한 이유
-/// 행 -> 열 순으로 위에서부터 아래로 행을 쌓아간다
 /// 
 struct Cell {
     bool isWall;        /// 벽이면 true
-    bool isFixed;           /// 고정상태면 true
+    bool isFixed;       /// 고정상태면 true
     int r, g, b;        /// 고정된 블럭의 색
 };
 
@@ -274,7 +269,6 @@ int nextSpeedUpScore = 1000;
 
 /// SetTimer 에서 사용할 초 변수
 /// 처음에는 1초
-/// 1초 라는것은 블럭이 생성될 때 까지 걸리는 시간 + 블럭이 내려오는데 걸리는 시간을 뜻한다
 int second = 1000;
 
 /// 한 턴에 저장 또는 불러오기를 둘 중 하나만 사용 가능하게 만드는 플래그 변수
@@ -1024,6 +1018,26 @@ void DrawKeyGuide(HDC hdc)
 
 }
 
+/// 화면에 일시정지 표시
+void DrawPause(HDC hdc) {
+    int left = 30 + SCORE_ORIGIN_X + BLOCK_SIZE * BOARD_W;
+    int top = SCORE_ORIGIN_Y + 10;
+
+    WCHAR showPause[32];
+    wsprintf(showPause, L"일시 정지");
+    TextOut(hdc, left, top, showPause, lstrlen(showPause));
+}
+
+/// 일시정지 가리기
+void CoverPause(HDC hdc) {
+    int left = 30 + SCORE_ORIGIN_X + BLOCK_SIZE * BOARD_W;
+    int top = SCORE_ORIGIN_Y + 10;
+
+    WCHAR showPause[32];
+    wsprintf(showPause, L"                        ");
+    TextOut(hdc, left, top, showPause, lstrlen(showPause));
+}
+
 
 /*
     선 속성 변경
@@ -1046,13 +1060,6 @@ void DrawKeyGuide(HDC hdc)
     DeleteObject(myBrush);
 
 */
-
-/// 필요함 함수들
-/// 벽 초기화
-/// 게임오버 확인
-
-
-
 // 전역 변수:
 HINSTANCE hInst;                                // 현재 인스턴스입니다.
 WCHAR szTitle[MAX_LOADSTRING];                  // 제목 표시줄 텍스트입니다.
@@ -1169,46 +1176,11 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 //  WM_DESTROY  - 종료 메시지를 게시하고 반환합니다.
 //
 //
-///테트리스를 만들기 위한 사고
-///테트리스는 여러 종류의 블럭들을 특정 공간 안에 빈 칸이 없게
-///전부 다 쌓아야지만 해당 공간이 비어지는 로직이 있음
-/// 그렇다면 이 공간은 어떻게 해야할까
-/// 아이디어 1 => 각 층들을 전부 배열로 구현(2차원 배열)
-/// 
-/// 각각의 배열 안에 내가 만들어놓은 구조물(생성되는것들)을 TRUE, FALSE 로 구분하여 한 칸 씩 내려올 때 마다 보이고, 안보이고를 설정
 /// 구조물의 이름은 테트로미노 라고 정의한다
 ///  'I', 'O', 'T', 'S', 'Z', 'J', 'L' - block 이 존재
 /// I-block, O-block, T-block, S-block, Z-block, J-block, L-block
 ///
 /// 
-/// 우선 게임 판 있어야함
-/// 게임을 하기 위해서는 구역이 정해져있어야함
-/// 게임의 구역은 2차원 배열
-/// 가로는 짝수
-/// 세로는 짝수 또는 홀수로 선언
-/// 가로 x 세로 => 12 x 60~70 정도
-/// 총 배열의 크기는 약 780정도
-/// 
-/// 배열의 선언은 boolean 으로 해도 되려나 ?
-/// 현재 배열에 존재하면 참 없으면 거짓?
-/// 
-/// 
-/// 그리고 블럭들이 존재해야함
-/// 블럭들은 전부 4개의 사각형으로 이루어져있음
-/// 이 블럭들은 기준점이 있음
-/// 기준점을 중심으로 좌로가면 -, 우로가면 +, 
-/// 
-/// 현재 진행상황은
-/// 블럭이 랜덤으로 생성되고
-/// 블럭을 쌓고, 층이 가득 차면 비워버린 뒤에 위의 층을 덮어쓰는
-/// 기본적인 테트리스 구조는 완성시켰음
-/// 여기에 추가해야할것은
-/// 이쁘기 꾸미기
-/// 현재 점수 영역
-/// 이 게임에서의 최고 점수 영역
-/// 다음 블럭 영역
-/// 다음 레벨 영역
-/// 을 만들어야함
 /// 
 /// 추가해야하는것
 /// 점수가 높아지면 높아질수록 블럭들이 점점 빠르게 내려오도록 해야함
@@ -1402,18 +1374,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             break;
             case VK_ESCAPE:
             {
-                /// TODO:: 게임 일시정지, 재개 만들어야함, 게임 화면 전체를 살짝 회색으로 바꾸고
-                ///        게임 보드 한가운데에 "일시정지" 를 그릴거임
+                HDC hdc = GetDC(hWnd);
                 if (!isPaused) {
                     /// isPaused 가 FALSE 라면 게임을 멈춰주고 TRUE 로 바꿔줌
                     KillTimer(hWnd, 1);
                     isPaused = TRUE;
+                    DrawPause(hdc);
                 }
                 else if (isPaused) {
                     /// isPaused 가 TRUE 라면 게임을 재개하고 FALSE 로 바꿔줌
                     SetTimer(hWnd, 1, second, NULL);
                     isPaused = FALSE;
+                    CoverPause(hdc);
                 }
+                ReleaseDC(hWnd, hdc);
             }
             break;
         }
