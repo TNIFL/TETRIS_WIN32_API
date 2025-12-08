@@ -39,6 +39,7 @@ using Shape = std::array<std::array<BYTE, 4>, 4>;
 
 /// 각 테트로미노가 어떤 좌표를 가지는지 초기 설정
 /// 7, 4 -> 테트로미노가 총 7개, 로테이션(회전) 4개
+/// TETROMINO 는 불변 데이터, 참조해서 사용하는 용도. 실제로 게임 보드상에서 움직임은 currentBlock 이 담당한다
 /// 내 테트로미노 구조는 [0~6:블럭 타입][0~3:ROT_0~270][(0~3)y:비트맵][(0~3)x:비트맵]
 static const Shape TETROMINO[7][4] = {
     /// I
@@ -260,6 +261,8 @@ struct Cell {
 Cell g_board[BOARD_H][BOARD_W];
 
 /// SpawnBlock 할 때 값을 할당해줄거임
+/// 게임 보드상에서 실제 움직임임을 행하려면 이 변수를
+/// currentPiece 구조체와 함께 사용한다
 int currentBlock[4][4];   /// 현재 조작중인 블럭 4 x 4 모양
 
 /// 현재 점수
@@ -668,6 +671,8 @@ void LoadCurrentPiece() {
     for (int y = 0; y < 4; y++) {
         for (int x = 0; x < 4; x++) {
             /// 내 테트로미노 구조는 [0~6:블럭 타입][0~3:ROT_0~270][y:비트맵][x:비트맵]
+            /// currentBlock[y][x] 에 TETROMINO 가 가지고 있는 currentPiece.type, currentPiece.rot 
+            /// 에 해당하는 비트맵 [y][x] 를 저장시킨다 (테트로미노가 어떻게 생겼는지, I, O, T, ...)
             currentBlock[y][x] = TETROMINO[currentPiece.type][currentPiece.rot][y][x];
         }
     }
