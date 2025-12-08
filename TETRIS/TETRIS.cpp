@@ -1386,8 +1386,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                     isPaused = TRUE;
                     /// isPaused 가 TRUE 일 때 DrawPause 를 그리지 않고
                     /// 항상 DrawPause 를 그린 뒤 isPaused 가 FALSE 일 때 CoverPause 를 호출해
-                    /// 지우는게 좋을거같은데
-                    /// TODO:: DrawPause 를 항상 그리고, CoverPause 를 호출해 일시정지가 아닐 시 덮어씌우게 바꿔야함
                     DrawPause(hdc);
                 }
                 else if (isPaused) {
