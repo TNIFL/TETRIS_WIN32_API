@@ -227,11 +227,6 @@ static const Shape TETROMINO[7][4] = {
     },
 };
 
-/// 게임 일시정지
-/// esc 누르면 게임 일시정지
-/// 한번더 누르면 재개
-BOOL isPaused;
-
 /// 테트로미노 구조체
 struct Piece {
     TetrominiType type;   /// TETROMINO (0 ~ 6)
@@ -239,6 +234,19 @@ struct Piece {
     int blockX, blockY;   /// 보드에서의 좌표(왼쪽 위 기준)
     int r, g, b;/// 테트로미노의 고유한 색상
 };
+/// !!! 게임 보드 영역의 좌표는 무조건 왼쪽 위 부터 오른쪽 아래로 갈 수록 커짐
+/// 
+struct Cell {
+    bool isWall;        /// 벽이면 true
+    bool isFixed;       /// 고정상태면 true
+    bool isLine;        /// Line을 그려야하는지 확인 (isLine이 TRUE 면 선 그리기)
+    int r, g, b;        /// 고정된 블럭의 색
+};
+
+/// 게임 일시정지
+/// esc 누르면 게임 일시정지
+/// 한번더 누르면 재개
+BOOL isPaused;
 
 /// 현재 떨어지고 있는 블럭의 정보를 담은 구조체
 Piece currentPiece;
@@ -248,16 +256,10 @@ Piece nextPiece;
 /// nextPiece가 준비 되었는지 확인하는 플래그 변수
 /// 처음 시작하자마자는 없음
 BOOL hasNextPiece = FALSE;
-
-
-/// !!! 게임 보드 영역의 좌표는 무조건 왼쪽 위 부터 오른쪽 아래로 갈 수록 커짐
-/// 
-struct Cell {
-    bool isWall;        /// 벽이면 true
-    bool isFixed;       /// 고정상태면 true
-    int r, g, b;        /// 고정된 블럭의 색
-};
-
+/// 게임 보드 배열
+/// g_board 에도 색상을 넣기 위해서는 색상 정보를 저장할 변수들이 필요함
+/// cell 구조체를 만들고
+/// cell 구조체형식의 g_board 로 생성
 Cell g_board[BOARD_H][BOARD_W];
 
 /// SpawnBlock 할 때 값을 할당해줄거임
@@ -284,10 +286,17 @@ int second = 1000;
 /// FixBlock 이 불러와지는 시점에서 FALSE 로 바꿔줌
 BOOL hasUsedSaveOrLoad;
 
-/// g_board 에도 색상을 넣기 위해서는 색상 정보를 저장할 변수들이 필요함
-/// 그렇다면 차라리 g_board도 구조체로 만들어버림
-/// cell 구조체를 만들고
-/// cell 구조체형식의 g_board 로 생성
+/// 저장을 하기 위해서는 Piece 타입의 전역변수로 선언해두고
+Piece saveBlock;
+/// BOOL 타입의 전역변수 하나 선언해두기
+/// 현재 저장된 블럭이 있는지
+/// 만약 저장된 블럭이 있다면 추가적으로 저장하지 못하게 만들어야함
+/// 처음 시작했을 때 에는 FALSE 로 두어서 저장된 블럭이 없다는것을 알림
+BOOL hasSaveBlock = FALSE;
+
+/// 블럭을 저장할 4x4 배열
+int blockToSave[4][4];
+
 
 /// 게임 플레이 영역의 벽 초기화
 void InitBoard() {
@@ -306,6 +315,10 @@ void InitBoard() {
         for (int x = 0; x < BOARD_W; x++) {
             /// 모든 색상을 rgb 0 0 0 으로 초기화
             g_board[y][x].r = g_board[y][x].g = g_board[y][x].b = 0;
+            /// 모든 게임보드는 먼저 g_board[y][x].isLine = FALSE로 초기화
+            /// isLine 이 TRUE 면 선을 그린다
+            /// 이 과정은 DrawGameBoard 에서 if문 추가해서 그린다
+            g_board[y][x].isLine = FALSE;
             /// x 가 0 이면 왼쪽 벽
             if (x == 0) {
                 g_board[y][x].isWall = TRUE;  /// y행의 x열을 1로(왼쪽 벽)
@@ -339,10 +352,13 @@ void InitBoard() {
 /// 프로그래머가 WM_PAINT를 요청하는 API
 ///  - InvalidateRect(hWnd, NULL, TRUE); -> 현재 화면을 다시 그려주세요
 /// 모든 화면 그리기는 항상 연산이 끝나고 나서 움직인다
+
+int drawLineX = 0;
+
 const int BLOCK_SIZE = 25;       /// 한개의 블럭은 30의 크기를 가짐
 const int ORIGIN_X = 70;    /// 이 게임 보드의 시작 위치는 70, 70(왼쪽 위 기준)
 const int ORIGIN_Y = 70;
-void DrawGameBoard(HWND hWnd, HDC hdc) {
+void DrawGameBoard(HDC hdc) {
     for (int y = 0; y < BOARD_H; y++) {
         for (int x = 0; x < BOARD_W; x++) {
 
@@ -365,6 +381,19 @@ void DrawGameBoard(HWND hWnd, HDC hdc) {
                 /// 정리
                 DeleteObject(myBrush);
             }
+            else if (g_board[y][x].isLine) {
+                HBRUSH myBrush = CreateSolidBrush(
+                    RGB(g_board[y][x].r,
+                        g_board[y][x].g,
+                        g_board[y][x].b));
+                HBRUSH osBrush = (HBRUSH)SelectObject(hdc, myBrush);
+
+                Rectangle(hdc, px, py, px + BLOCK_SIZE, py + BLOCK_SIZE);
+
+                SelectObject(hdc, osBrush);
+                DeleteObject(myBrush);
+            }
+
             else if (g_board[y][x].isFixed) {
                 /// 고정된 블럭의 rgb 값으로 g_board[y][x] 좌표를 채운다
                 HBRUSH myBrush = CreateSolidBrush(
@@ -376,6 +405,7 @@ void DrawGameBoard(HWND hWnd, HDC hdc) {
                 SelectObject(hdc, osBrush);
                 DeleteObject(myBrush);
             }
+            
             /// 빈 칸 그리기(흰색)
             else {
                 Rectangle(hdc, px, py, px + BLOCK_SIZE, py + BLOCK_SIZE);
@@ -384,17 +414,6 @@ void DrawGameBoard(HWND hWnd, HDC hdc) {
     }
 }
 
-
-/// 블럭이 내려와야함
-/// 근데 이미 그려진 영역 안에서만 블럭이 내려와야하고 
-/// 한번 내려올 때는 30px 씩 내려옴
-/// 먼저 내려올 블럭이 생성될 위치는 220px 또는 250px 둘 중 하나의 위치에(왼쪽 위 기준) 블럭 생성
-/// 우선은 그냥 네모난 블럭만 생성해서 내려오게 해봄
-void DrawDownBlock(HWND hWnd, HDC hdc) {
-    /// 근데 타이머로 움직여야하나?
-    /// 정해진 시간마다 움직이게 하려면 타이머 말고 다른게 있을까..
-    
-}
 
 void calcScore(int count) {
     if (count == 1) {
@@ -415,7 +434,7 @@ void calcScore(int count) {
 const int SCORE_ORIGIN_X = 70;
 const int SCORE_ORIGIN_Y = 10;
 
-void DrawScoreBoard(HWND hWnd, HDC hdc) {
+void DrawScoreBoard(HDC hdc) {
     Rectangle(hdc, SCORE_ORIGIN_X, SCORE_ORIGIN_Y, SCORE_ORIGIN_X + (BLOCK_SIZE * BOARD_W), SCORE_ORIGIN_Y + 50);
     /// Rect 안에 현재 점수를 넣고 점수가 들어올 때 마다 계속 갱신해야함
     /// Rect 안에 현재 점수를 출력시킴
@@ -500,16 +519,6 @@ void DrawNextBlockArea(HDC hdc) {
     DeleteObject(myBrush);
 }
 
-/// 저장을 하기 위해서는 Piece 타입의 전역변수로 선언해두고
-Piece saveBlock;
-/// BOOL 타입의 전역변수 하나 선언해두기
-/// 현재 저장된 블럭이 있는지
-/// 만약 저장된 블럭이 있다면 추가적으로 저장하지 못하게 만들어야함
-/// 처음 시작했을 때 에는 FALSE 로 두어서 저장된 블럭이 없다는것을 알림
-BOOL hasSaveBlock = FALSE;
-
-int blockToSave[4][4];
-
 void LoadSavePiece() {
     for (int y = 0; y < 4; y++) {
         for (int x = 0; x < 4; x++) {
@@ -528,8 +537,7 @@ void LoadSavePiece() {
 /// saveBlockArea는 다음 블럭 영역 바로 아래에 둘거임
 /// 
 /// 그리고 저장된 블럭이 이미 있다면 현재 블럭이랑 스왑하는 형식으로 해야할듯
-void DrawSaveBlockArea(HWND hWnd) {
-    HDC hdc = GetDC(hWnd);
+void DrawSaveBlockArea(HDC hdc) {
     int left = 30 + SCORE_ORIGIN_X + BLOCK_SIZE * BOARD_W;
     int top = SCORE_ORIGIN_Y + 60 + 180 + 30;
     int right = left + 180;
@@ -545,7 +553,6 @@ void DrawSaveBlockArea(HWND hWnd) {
     
     /// 저장된 블럭이 있다면 return;
     if (!hasSaveBlock) {
-        ReleaseDC(hWnd, hdc);
         return;
     }
     LoadSavePiece();
@@ -677,6 +684,94 @@ void LoadCurrentPiece() {
         }
     }
 }
+void FillBoard(int px, int py, HDC hdc) {
+
+    /// 여기서 색칠하기
+    HBRUSH myBrush = CreateSolidBrush(RGB(
+        currentPiece.r, currentPiece.g, currentPiece.b
+    ));
+    /// os 가 들고있는 브러쉬를 myBrush 로 바꿔버림
+    HBRUSH osBrush = (HBRUSH)SelectObject(hdc, myBrush);
+    for (int y = 0; y < BOARD_H - 1; y++) {
+
+        /*
+        g_board[y][px].r = currentPiece.r;
+        g_board[y][px].g = currentPiece.g;
+        g_board[y][px].b = currentPiece.b;
+        */
+        Rectangle(hdc, px, py, px + BLOCK_SIZE, py + BLOCK_SIZE);
+    }
+
+    SelectObject(hdc, osBrush);
+    DeleteObject(myBrush);
+
+}
+
+
+/// 교수님 요구사항
+/// 1. 현재 내려오는 블럭의 해당 세로 라인을 현재 내려오는 블럭과 같은 색으로 칠해버린다
+/// 2. 또는 현재 내려오는 블럭이 어디에 내려가게 되는지 알 수 있게
+/// 
+
+
+/// 함수를 하나 만들어서 WM_PAINT 안에서 호출시킨다
+/// 이 함수는 블럭을 돌릴 때 에도 사용해야한다
+/// A, S 누를때도 사용
+void DrawCurrentBlockLine(HDC hdc) {
+    /// 이 함수에서는 g_board 에 존재하는 현재 내려오는 블럭의 색을 그대로 가져와 세로로 줄을 긋게 한다
+    /// 고려해야 할 점
+    /// 
+    /// 현재 내려오는 블럭
+    /// - 현재 내려오는 블럭이 g_board상에서 어디에 존재하는지
+    /// - 현재 내려오는 블럭의 색상
+    /// 
+    /// Fix 된 블럭
+    ///  - Fix 된 블럭은 현재 내려오는 색상에 영향을 받지 않게
+    ///  - 마찬가지로 Fix 된 블럭 아래에 빈공간이 있어도 위에서 막혔다면 빈공간으로 냅두기
+    /// 
+    /// isWall
+    ///  - isWall 은 색칠하지 않는다
+    /// 
+    /// 그럼 건들여야할것이
+    ///  - 현재 내려오는 블럭
+    ///  - 현재 내려오는 블럭의 g_board 에서의 좌표
+    /// 
+    
+
+    HBRUSH myBrush = CreateSolidBrush(RGB(
+        currentPiece.r, currentPiece.g, currentPiece.b
+    )); /// 저장된 블럭의 색깔
+    HBRUSH osBrush = (HBRUSH)SelectObject(hdc, myBrush);
+   
+    int px = 0;
+    int py = 0;
+    /// y 배열의 x 칸을 칠해야함
+    
+    for (int y = 0; y < 4; y++) {
+        for (int x = 0; x < 4; x++) {
+            if (currentBlock[y][x] == 1) {
+                
+                px = ORIGIN_X + (currentPiece.blockX + x) * BLOCK_SIZE;
+                
+                for (int ny = 0; ny < BOARD_H - 1; ny++) {
+                    g_board[ny][px].isLine = TRUE;
+                    g_board[ny][px].r = currentPiece.r;
+                    g_board[ny][px].g = currentPiece.g;
+                    g_board[ny][px].b = currentPiece.b;
+                }
+            }
+        }
+    }
+
+    
+
+    SelectObject(hdc, osBrush);
+    DeleteObject(myBrush);
+
+}
+
+
+
 
 /// 아래 함수는 화살표 DOWN 에 대한 충돌감지만 수행한다
 /// 키보드 'A', 'S' 에 관한 충돌감지 함수도 제작해야한다
@@ -965,9 +1060,6 @@ void SpawnBlock() {
         break;
     }
 
-    /// 여기서 게임오버 확인함
-    /// 새로 스폰된 블럭이 움직이지 않은 상태에서
-    /// 현재 fix 된 블럭과 좌표가 겹치는게 하나라도 있으면 게임 오버시킴
 
     LoadCurrentPiece();
     /// 먼저 LoadCurrentPiece() 한 다음에 바로 닿는게 있다면 게임종료
@@ -976,8 +1068,9 @@ void SpawnBlock() {
 
 
 
-/// 화면에 스폰시킨 블럭 그리기
-void DrawCurrentBlock(HWND hWnd, HDC hdc) {
+
+/// 화면에 스폰시킨(현재 내려가는) 블럭 그리기
+void DrawCurrentBlock(HDC hdc) {
     HBRUSH myBrush = CreateSolidBrush(RGB(
         currentPiece.r, currentPiece.g, currentPiece.b
     ));  // 빨간 블럭
@@ -994,6 +1087,7 @@ void DrawCurrentBlock(HWND hWnd, HDC hdc) {
             }
         }
     }
+
     SelectObject(hdc, osBrush);
     DeleteObject(myBrush);
 }
@@ -1492,14 +1586,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             PAINTSTRUCT ps;
             HDC hdc = BeginPaint(hWnd, &ps);
 
-            DrawGameBoard(hWnd, hdc);
-            DrawScoreBoard(hWnd, hdc);
+            DrawGameBoard(hdc);
+            DrawScoreBoard(hdc);
             DrawNextBlockArea(hdc);
             DrawHighScoreBoard(hdc);
-            DrawCurrentBlock(hWnd, hdc);
-            DrawSaveBlockArea(hWnd);
+            DrawCurrentBlock(hdc);
+            DrawSaveBlockArea(hdc);
             ///ShowCurrentSecond(hWnd);
             DrawKeyGuide(hdc);
+            /// 교수님 요청사항
+            DrawCurrentBlockLine(hdc);
+
+            ReleaseDC(hWnd, hdc);
             EndPaint(hWnd, &ps);
         }
         break;
